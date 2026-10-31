@@ -1,0 +1,166 @@
+@startuml use_case_diagram
+'=======================================================================
+' USE CASE DIAGRAM
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML
+'=======================================================================
+
+!theme cerulean-outline
+skinparam actorStyle awesome
+skinparam usecase {
+    BackgroundColor #EDE7F6
+    BorderColor #4527A0
+    ArrowColor #1565C0
+    ActorBorderColor #1B5E20
+    ActorBackgroundColor #E8F5E9
+    ActorFontColor #1B5E20
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #F57F17
+}
+
+title Use Case Diagram\nPrivacy-Preserving Federated Learning System
+
+' -----------------------------------------------------------------------
+' ACTORS
+' -----------------------------------------------------------------------
+actor "Admin" as ADMIN
+actor "System Operator" as SYSOP
+actor "Registered Edge Device" as DEVICE
+
+' -----------------------------------------------------------------------
+' SYSTEM BOUNDARY
+' -----------------------------------------------------------------------
+rectangle "Privacy-Preserving Federated Learning System" {
+
+    ' -------------------------------------------------------------------
+    ' AUTHENTICATION & USER MANAGEMENT USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Login" as UC_LOGIN
+    usecase "Manage Users" as UC_MANAGE_USERS
+    usecase "Validate Credentials" as UC_VALIDATE_CRED #LightGray
+
+    ' -------------------------------------------------------------------
+    ' DEVICE MANAGEMENT USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Register Edge Device" as UC_REG_DEVICE
+    usecase "Authenticate Device" as UC_AUTH_DEVICE
+    usecase "Generate Device Token" as UC_GEN_TOKEN #LightGray
+
+    ' -------------------------------------------------------------------
+    ' FEDERATED LEARNING COORDINATION USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Configure FL Training" as UC_CONFIG_FL
+    usecase "Start Training Round" as UC_START_ROUND
+    usecase "Select Participating Devices" as UC_SELECT_DEVICES
+    usecase "Distribute Global Model" as UC_DIST_MODEL
+    usecase "Check Device Resource Eligibility" as UC_CHECK_RESOURCE #LightGray
+
+    ' -------------------------------------------------------------------
+    ' EDGE DEVICE TRAINING USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Perform Local Training" as UC_LOCAL_TRAIN
+    usecase "Calculate Model Update" as UC_CALC_UPDATE #LightGray
+    usecase "Apply Differential Privacy" as UC_APPLY_DP
+    usecase "Compress Model Updates" as UC_COMPRESS
+    usecase "Perform Secure Aggregation" as UC_SECAGG
+
+    ' -------------------------------------------------------------------
+    ' GLOBAL AGGREGATION USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Aggregate Global Model" as UC_AGGREGATE
+    usecase "Update Privacy Accountant" as UC_UPDATE_RDP #LightGray
+
+    ' -------------------------------------------------------------------
+    ' MONITORING & REPORTING USE CASES
+    ' -------------------------------------------------------------------
+    usecase "Monitor Training Progress" as UC_MON_TRAIN
+    usecase "Monitor Device Resources" as UC_MON_DEVICE
+    usecase "View Model Performance" as UC_VIEW_PERF
+    usecase "View Training History" as UC_VIEW_HISTORY
+    usecase "Generate Reports" as UC_REPORTS
+
+}
+
+' -----------------------------------------------------------------------
+' ACTOR ASSOCIATIONS
+' -----------------------------------------------------------------------
+
+' Admin associations
+ADMIN --> UC_LOGIN
+ADMIN --> UC_MANAGE_USERS
+ADMIN --> UC_REG_DEVICE
+ADMIN --> UC_CONFIG_FL
+ADMIN --> UC_START_ROUND
+ADMIN --> UC_MON_TRAIN
+ADMIN --> UC_VIEW_PERF
+ADMIN --> UC_VIEW_HISTORY
+ADMIN --> UC_REPORTS
+
+' System Operator associations
+SYSOP --> UC_LOGIN
+SYSOP --> UC_MON_TRAIN
+SYSOP --> UC_MON_DEVICE
+SYSOP --> UC_VIEW_PERF
+SYSOP --> UC_VIEW_HISTORY
+SYSOP --> UC_REPORTS
+
+' Edge Device associations
+DEVICE --> UC_AUTH_DEVICE
+DEVICE --> UC_LOCAL_TRAIN
+DEVICE --> UC_APPLY_DP
+DEVICE --> UC_COMPRESS
+DEVICE --> UC_SECAGG
+
+' -----------------------------------------------------------------------
+' INCLUDE RELATIONSHIPS
+' -----------------------------------------------------------------------
+
+UC_LOGIN ..> UC_VALIDATE_CRED : <<include>>
+UC_AUTH_DEVICE ..> UC_GEN_TOKEN : <<include>>
+UC_LOCAL_TRAIN ..> UC_CALC_UPDATE : <<include>>
+UC_START_ROUND ..> UC_SELECT_DEVICES : <<include>>
+UC_START_ROUND ..> UC_DIST_MODEL : <<include>>
+UC_SELECT_DEVICES ..> UC_CHECK_RESOURCE : <<include>>
+UC_AGGREGATE ..> UC_UPDATE_RDP : <<include>>
+UC_COMPRESS ..> UC_APPLY_DP : <<include>>
+
+' -----------------------------------------------------------------------
+' EXTEND RELATIONSHIPS
+' -----------------------------------------------------------------------
+
+UC_MON_DEVICE ..> UC_MON_TRAIN : <<extend>>\n[device failure detected]
+UC_REPORTS ..> UC_VIEW_HISTORY : <<extend>>\n[historical data requested]
+UC_SECAGG ..> UC_AGGREGATE : <<extend>>\n[all uploads received]
+
+' -----------------------------------------------------------------------
+' NOTES
+' -----------------------------------------------------------------------
+
+note right of UC_LOCAL_TRAIN
+    Raw local dataset D_k
+    NEVER transmitted.
+    Training stays on device.
+end note
+
+note right of UC_APPLY_DP
+    Adaptive L2 clipping (C^t)
+    + Gaussian noise injection
+    calibrated to M_min
+end note
+
+note right of UC_SECAGG
+    PRG self-masks +
+    pairwise masks over Z_R.
+    Server sees only cohort sum.
+end note
+
+note right of UC_COMPRESS
+    Shared-mask sparsification
+    + stochastic quantization.
+    Reduces upload to K+1 dims.
+end note
+
+@enduml

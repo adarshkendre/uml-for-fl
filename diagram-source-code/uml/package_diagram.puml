@@ -1,0 +1,173 @@
+@startuml package_diagram
+'=======================================================================
+' PACKAGE DIAGRAM
+' Logical Organization of the Software System
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML
+'=======================================================================
+
+!theme cerulean-outline
+skinparam package {
+    BackgroundColor #EDE7F6
+    BorderColor #4527A0
+    FontSize 12
+    FontColor #1A237E
+    Style rectangle
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #F57F17
+}
+
+title Package Diagram: Logical Software Organization\nPrivacy-Preserving Federated Learning System
+
+package "common" as PKG_COMMON #E3F2FD {
+    [ConfigManager]
+    [LoggerUtil]
+    [CryptoUtil]
+    [SerializationUtil]
+    [NetworkUtil]
+}
+
+package "database" as PKG_DB #FFF3E0 {
+    [DatabaseManager]
+    [UserRepository]
+    [DeviceRepository]
+    [RoundRepository]
+    [ModelRepository]
+    [MetricsRepository]
+}
+
+package "authentication" as PKG_AUTH #E8F5E9 {
+    [AuthenticationService]
+    [TokenManager]
+    [PasswordHasher]
+    [DeviceCredentialManager]
+}
+
+package "presentation" as PKG_PRES #FCE4EC {
+    [Dashboard]
+    [ReportGenerator]
+    [AlertService]
+}
+
+package "api" as PKG_API #E8EAF6 {
+    [BackendAPIServer]
+    [AuthController]
+    [FLController]
+    [MonitoringController]
+}
+
+package "monitoring" as PKG_MON #E0F7FA {
+    [MonitoringService]
+    [TrainingProgressTracker]
+    [DeviceHealthTracker]
+}
+
+package "federated_learning" as PKG_FL #EDE7F6 {
+    [FederatedLearningCoordinator]
+    [TrainingRound]
+    [DeviceSelector]
+    [AdmissionScheduler]
+}
+
+package "global_aggregation" as PKG_GAGG #F3E5F5 {
+    [GlobalAggregator]
+    [FedAvgAggregator]
+    [ModelEvaluator]
+    [ClippingThresholdUpdater]
+}
+
+package "secure_aggregation" as PKG_SA #E8F5E9 {
+    [SecureAggregator]
+    [PRGMaskGenerator]
+    [SecretShareManager]
+    [ModularArithmeticUtil]
+}
+
+package "differential_privacy" as PKG_DP #FFF3E0 {
+    [DifferentialPrivacy]
+    [GaussianNoiseInjector]
+    [NormClipper]
+    [RDPAccountant]
+    [NoiseCalibrator]
+}
+
+package "model_compression" as PKG_MC #FCE4EC {
+    [ModelCompressor]
+    [SharedMaskSparsifier]
+    [StochasticQuantizer]
+    [ErrorFeedbackManager]
+}
+
+package "local_training" as PKG_LT #E0F7FA {
+    [LocalTrainer]
+    [SGDOptimizer]
+    [DatasetLoader]
+    [ModelUpdateCalculator]
+}
+
+package "edge_client" as PKG_EC #E8EAF6 {
+    [FLClient]
+    [EdgeDevice]
+    [TelemetryProbe]
+    [DeviceStateMachine]
+}
+
+' Dependencies
+PKG_AUTH ..> PKG_COMMON : uses
+PKG_DB ..> PKG_COMMON : uses
+PKG_API ..> PKG_COMMON : uses
+PKG_FL ..> PKG_COMMON : uses
+PKG_EC ..> PKG_COMMON : uses
+PKG_DP ..> PKG_COMMON : uses
+PKG_MC ..> PKG_COMMON : uses
+PKG_LT ..> PKG_COMMON : uses
+PKG_SA ..> PKG_COMMON : uses
+PKG_GAGG ..> PKG_COMMON : uses
+PKG_MON ..> PKG_COMMON : uses
+
+PKG_API ..> PKG_AUTH : uses
+PKG_API ..> PKG_FL : uses
+PKG_API ..> PKG_MON : uses
+
+PKG_PRES ..> PKG_API : uses
+PKG_PRES ..> PKG_MON : uses
+
+PKG_FL ..> PKG_GAGG : uses
+PKG_FL ..> PKG_SA : uses
+PKG_FL ..> PKG_DB : uses
+PKG_FL ..> PKG_MON : uses
+
+PKG_GAGG ..> PKG_SA : uses
+PKG_GAGG ..> PKG_DB : uses
+PKG_GAGG ..> PKG_DP : uses
+
+PKG_SA ..> PKG_DB : uses
+PKG_EC ..> PKG_LT : uses
+PKG_EC ..> PKG_DP : uses
+PKG_EC ..> PKG_MC : uses
+PKG_EC ..> PKG_SA : uses
+
+PKG_DP ..> PKG_MC : depends on
+PKG_AUTH ..> PKG_DB : uses
+PKG_MON ..> PKG_DB : uses
+
+note bottom of PKG_EC
+    Runs on physical edge device.
+    Orchestrates client-side FL pipeline.
+end note
+
+note bottom of PKG_FL
+    Runs on central server.
+    Manages round lifecycle and
+    device selection.
+end note
+
+note right of PKG_COMMON
+    No project package dependencies.
+    Pure utility layer.
+end note
+
+@enduml

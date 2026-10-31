@@ -1,0 +1,395 @@
+@startuml class_diagram
+'=======================================================================
+' CLASS DIAGRAM
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML
+'=======================================================================
+
+!theme cerulean-outline
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #EDE7F6
+    BorderColor #4527A0
+    ArrowColor #1565C0
+    HeaderBackgroundColor #4527A0
+    HeaderFontColor #FFFFFF
+    FontSize 11
+}
+skinparam packageStyle rectangle
+skinparam package {
+    BackgroundColor #F3E5F5
+    BorderColor #6A1B9A
+}
+
+title Class Diagram\nPrivacy-Preserving Federated Learning System
+
+' -----------------------------------------------------------------------
+' PACKAGE: Authentication & User Management
+' -----------------------------------------------------------------------
+package "authentication" {
+
+    abstract class User {
+        - userId : int
+        - username : String
+        - passwordHash : String
+        - email : String
+        - isActive : boolean
+        - createdAt : DateTime
+        - lastLoginAt : DateTime
+        + login(username: String, password: String) : boolean
+        + logout() : void
+        + isAuthenticated() : boolean
+        + getProfile() : Map<String, Object>
+    }
+
+    class Admin {
+        - managedUsers : List<User>
+        + registerDevice(device: EdgeDevice) : boolean
+        + configureTraining(config: TrainingConfig) : void
+        + startTrainingRound() : TrainingRound
+        + manageUsers(action: String, userId: int) : boolean
+        + generateReport(roundId: int) : Report
+        + viewTrainingHistory() : List<TrainingRound>
+    }
+
+    class SystemOperator {
+        - assignedDevices : List<EdgeDevice>
+        + monitorTrainingProgress(roundId: int) : TrainingMetrics
+        + monitorDeviceResources(deviceId: int) : DeviceMetrics
+        + viewModelPerformance(modelId: int) : ModelPerformance
+        + generateStatusReport() : Report
+    }
+
+    class AuthenticationService {
+        - tokenStore : Map<String, String>
+        - tokenExpiryMinutes : int
+        + authenticateUser(username: String, password: String) : String
+        + authenticateDevice(deviceUUID: String, publicKeyHash: String) : String
+        + validateToken(token: String) : boolean
+        + revokeToken(token: String) : void
+        + hashPassword(password: String) : String
+        + generateJWT(subject: String, role: String) : String
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Edge Device Client
+' -----------------------------------------------------------------------
+package "edge_client" {
+
+    class EdgeDevice {
+        - deviceId : int
+        - deviceName : String
+        - deviceType : String
+        - deviceUUID : String
+        - publicKeyHash : String
+        - status : DeviceStatus
+        - cpuCores : float
+        - ramMb : int
+        - batteryAvailable : boolean
+        - registeredAt : DateTime
+        - lastSeenAt : DateTime
+        + register(coordinatorUrl: String) : boolean
+        + authenticate(token: String) : boolean
+        + sendTelemetry() : DeviceMetrics
+        + receiveGlobalModel(model: Model) : void
+        + startTraining(round: TrainingRound) : void
+        + getStatus() : DeviceStatus
+        + isEligible(deadline: float, memMin: int, energyMin: float) : boolean
+    }
+
+    class FLClient {
+        - device : EdgeDevice
+        - currentRound : TrainingRound
+        - globalModel : Model
+        - errorBuffer : float[]
+        + receiveGlobalModel(model: Model, clippingThreshold: float, coordinateMask: int[]) : void
+        + executeRound(round: TrainingRound) : void
+        + uploadMaskedUpdate(update: float[]) : boolean
+        + reportStatus(status: String) : void
+        + handleRoundTimeout() : void
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Local Training
+' -----------------------------------------------------------------------
+package "local_training" {
+
+    class LocalTrainer {
+        - device : EdgeDevice
+        - localEpochs : int
+        - learningRate : float
+        - batchSize : int
+        - localDataset : Dataset
+        - errorFeedback : float[]
+        - errorFeedbackDecay : float
+        + trainLocalModel(globalModel: Model, epochs: int) : Model
+        + calculateModelUpdate(localModel: Model, globalModel: Model) : float[]
+        + applyErrorFeedback(rawUpdate: float[], errorBuffer: float[]) : float[]
+        + projectOntoMask(update: float[], coordinateMask: int[]) : float[]
+        + updateErrorBuffer(residual: float[], normCap: float) : float[]
+        - runSGDEpoch(model: Model, dataset: Dataset) : void
+    }
+
+    class Model {
+        - modelId : int
+        - modelVersion : int
+        - parameterCount : int
+        - weights : float[]
+        - validationAccuracy : float
+        - validationLoss : float
+        - createdAt : DateTime
+        + getWeights() : float[]
+        + setWeights(weights: float[]) : void
+        + evaluate(dataset: Dataset) : ModelPerformance
+        + serialize() : byte[]
+        + deserialize(data: byte[]) : void
+        + clone() : Model
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Privacy Protection
+' -----------------------------------------------------------------------
+package "privacy" {
+
+    class DifferentialPrivacy {
+        - noiseMultiplierModel : float
+        - noiseMultiplierBit : float
+        - targetQuantile : float
+        - clippingLearningRate : float
+        - minSurvivingCohort : int
+        + clipUpdate(update: float[], clippingThreshold: float) : float[]
+        + computeIndicatorBit(updateNorm: float, clippingThreshold: float) : float
+        + injectGaussianNoise(update: float[], variance: float) : float[]
+        + calibrateNoiseVariance(sigmaModel: float, clippingThreshold: float, mMin: int) : float
+        + updateClippingThreshold(currentC: float, gamma: float, gammaTarget: float) : float
+        + computeEffectiveSigma() : float
+        + getPrivacyCost(numRounds: int, samplingRate: float) : double[]
+    }
+
+    class ModelCompressor {
+        - activeCordinates : int[]
+        - sparsityRatio : float
+        - fixedPointBits : int
+        - fractionalBits : int
+        - ringModulus : long
+        + applySharedMaskSparsification(update: float[], mask: int[]) : float[]
+        + stochasticQuantize(vector: float[], fractionBits: int, ringModulus: long) : long[]
+        + concatenateWithIndicator(sparseUpdate: float[], indicatorBit: float) : float[]
+        + checkOverflowConstraint(cohortSize: int, clipThreshold: float, sigma: float, mMin: int) : boolean
+        + compress(update: float[], mask: int[]) : long[]
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Secure Aggregation
+' -----------------------------------------------------------------------
+package "secure_aggregation" {
+
+    class SecureAggregator {
+        - cohortSize : int
+        - dropoutTolerance : int
+        - ringModulus : long
+        - pairwiseSeeds : Map<String, long[]>
+        - selfMaskSeeds : Map<Integer, long[]>
+        + generatePairwiseKeys(deviceIds: List<Integer>) : void
+        + applyMask(quantizedVector: long[], deviceId: int, cohortIds: List<Integer>) : long[]
+        + unmaskCohortSum(maskedVectors: Map<Integer, long[]>, survivorIds: List<Integer>) : long[]
+        + recoverDroppedMasks(secretShares: Map<Integer, byte[]>) : long[]
+        + decodeCohortSum(maskedSum: long[], fractionalBits: int) : float[]
+        + isBelowMinSurvivors(survivorCount: int, mMin: int) : boolean
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Federated Learning Coordination
+' -----------------------------------------------------------------------
+package "federated_learning" {
+
+    class FederatedLearningCoordinator {
+        - globalModel : Model
+        - currentRound : TrainingRound
+        - registeredDevices : List<EdgeDevice>
+        - cohortSize : int
+        - dropoutMax : int
+        - roundDeadline : float
+        - rdpAccountant : RDPAccountant
+        + initializeGlobalModel(modelConfig: Map) : Model
+        + startRound(config: TrainingConfig) : TrainingRound
+        + selectEligibleDevices(candidates: List<EdgeDevice>, deadline: float) : List<EdgeDevice>
+        + broadcastGlobalModel(model: Model, cohort: List<EdgeDevice>, clippingThreshold: float, coordinateMask: int[]) : void
+        + collectMaskedUpdates(roundId: int) : Map<Integer, long[]>
+        + handleDeviceDropout(deviceId: int) : void
+        + distributeUpdatedModel(model: Model, cohort: List<EdgeDevice>) : void
+        + isStoppingCriteriaMet(round: TrainingRound) : boolean
+        - generateSharedCoordinateMask(modelDim: int, k: int) : int[]
+        - estimateRoundLatency(device: EdgeDevice) : float
+    }
+
+    class TrainingRound {
+        - roundId : int
+        - targetCohortSize : int
+        - survivingCohortSize : int
+        - dMaxTolerated : int
+        - activeCoordinatesK : int
+        - clippingThreshold : float
+        - noiseMultiplierSigma : float
+        - roundStatus : RoundStatus
+        - startedAt : DateTime
+        - completedAt : DateTime
+        - dropoutCount : int
+        + initialize(config: TrainingConfig) : void
+        + updateStatus(status: RoundStatus) : void
+        + addParticipant(device: EdgeDevice) : void
+        + markDeviceDropped(deviceId: int) : void
+        + isComplete() : boolean
+        + getDuration() : float
+        + getMinSurvivors() : int
+    }
+
+    class GlobalAggregator {
+        - globalModel : Model
+        - currentRound : TrainingRound
+        + aggregateUpdates(cohortSum: float[], coordinateMask: int[], survivorCount: int, globalModel: Model) : Model
+        + updateClippingThreshold(noisyUnclippedFraction: float, currentC: float) : float
+        + evaluateModel(model: Model, validationDataset: Dataset) : ModelPerformance
+        + updateRDPAccountant(accountant: RDPAccountant, round: TrainingRound) : void
+        - embedSparseUpdate(sparseUpdate: float[], mask: int[], dim: int) : float[]
+    }
+}
+
+' -----------------------------------------------------------------------
+' PACKAGE: Monitoring & Database
+' -----------------------------------------------------------------------
+package "monitoring" {
+
+    class DeviceMetrics {
+        - metricId : int
+        - deviceId : int
+        - roundId : int
+        - cpuUsagePercent : float
+        - ramFreeMb : float
+        - batteryEnergyJoules : float
+        - uplinkBwBps : float
+        - downlinkBwBps : float
+        - estimatedRoundLatency : float
+        - admittedToRound : boolean
+        - recordedAt : DateTime
+        + isEligible(memMin: int, energyMin: float, deadline: float) : boolean
+        + toMap() : Map<String, Object>
+    }
+
+    class TrainingMetrics {
+        - metricId : int
+        - roundId : int
+        - globalValidationAccuracy : float
+        - globalValidationLoss : float
+        - cumulativeEpsilon : float
+        - delta : float
+        - noiseInflationFactor : float
+        - aggregationLatency : float
+        - secaggUnmaskingLatency : float
+        - participatingDevices : int
+        - recordedAt : DateTime
+        + toReport() : Report
+        + toMap() : Map<String, Object>
+    }
+
+    class Dashboard {
+        - connectedSessions : List<String>
+        - refreshIntervalMs : int
+        + displayTrainingProgress(roundId: int) : void
+        + displayDeviceStatus(devices: List<EdgeDevice>) : void
+        + displayModelPerformance(metrics: TrainingMetrics) : void
+        + displayPrivacyBudget(epsilon: float, delta: float) : void
+        + streamRealTimeUpdates(data: Map<String, Object>) : void
+        + generateReport(roundIds: List<Integer>) : Report
+        + viewTrainingHistory(filters: Map<String, Object>) : List<TrainingMetrics>
+    }
+
+    class DatabaseManager {
+        - connectionString : String
+        - connectionPool : Object
+        + saveUser(user: User) : int
+        + getUserById(userId: int) : User
+        + saveEdgeDevice(device: EdgeDevice) : int
+        + getEligibleDevices() : List<EdgeDevice>
+        + saveTrainingRound(round: TrainingRound) : int
+        + saveModel(model: Model) : int
+        + getLatestGlobalModel() : Model
+        + saveModelUpdate(update: ModelUpdate) : int
+        + saveDeviceMetrics(metrics: DeviceMetrics) : int
+        + saveTrainingMetrics(metrics: TrainingMetrics) : int
+        + getTrainingHistory(filters: Map) : List<TrainingMetrics>
+        + saveAuditLog(event: AuditLogEntry) : void
+    }
+
+    class ModelUpdate {
+        - updateId : int
+        - roundId : int
+        - deviceId : int
+        - modelId : int
+        - dpApplied : boolean
+        - sparsificationApplied : boolean
+        - secaggMasked : boolean
+        - updateNormBeforeClip : float
+        - clippedNorm : float
+        - indicatorBit : boolean
+        - transmittedCoordinates : int
+        - transmissionTimeSeconds : float
+        - updateStatus : UpdateStatus
+        - createdAt : DateTime
+        + getMetadata() : Map<String, Object>
+    }
+}
+
+' -----------------------------------------------------------------------
+' INHERITANCE RELATIONSHIPS
+' -----------------------------------------------------------------------
+User <|-- Admin
+User <|-- SystemOperator
+
+' -----------------------------------------------------------------------
+' COMPOSITION RELATIONSHIPS
+' -----------------------------------------------------------------------
+FederatedLearningCoordinator *-- TrainingRound : manages >
+FederatedLearningCoordinator *-- GlobalAggregator : uses >
+FLClient *-- LocalTrainer : delegates training >
+FLClient *-- DifferentialPrivacy : applies >
+FLClient *-- ModelCompressor : uses >
+FLClient *-- SecureAggregator : applies >
+
+' -----------------------------------------------------------------------
+' AGGREGATION RELATIONSHIPS
+' -----------------------------------------------------------------------
+FederatedLearningCoordinator o-- EdgeDevice : coordinates "1" to "0..*"
+FLClient o-- EdgeDevice : runs on >
+DatabaseManager o-- ModelUpdate : stores >
+DatabaseManager o-- DeviceMetrics : stores >
+DatabaseManager o-- TrainingMetrics : stores >
+
+' -----------------------------------------------------------------------
+' ASSOCIATION RELATIONSHIPS
+' -----------------------------------------------------------------------
+Admin --> FederatedLearningCoordinator : configures >
+Admin --> Dashboard : uses >
+SystemOperator --> Dashboard : monitors via >
+AuthenticationService --> User : authenticates >
+AuthenticationService --> EdgeDevice : authenticates >
+LocalTrainer --> Model : trains >
+GlobalAggregator --> Model : aggregates into >
+TrainingRound --> EdgeDevice : includes "1" to "1..*"
+Dashboard --> DatabaseManager : queries >
+FederatedLearningCoordinator --> DatabaseManager : persists to >
+
+' -----------------------------------------------------------------------
+' DEPENDENCY RELATIONSHIPS
+' -----------------------------------------------------------------------
+DifferentialPrivacy ..> ModelCompressor : coordinates with
+SecureAggregator ..> GlobalAggregator : feeds cohort sum
+ModelUpdate ..> TrainingRound : belongs to
+
+@enduml

@@ -1,0 +1,171 @@
+@startuml state_machine_diagram
+'=======================================================================
+' STATE MACHINE DIAGRAM
+' Lifecycle of a Physical Edge Device
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML
+'=======================================================================
+
+!theme cerulean-outline
+skinparam state {
+    BackgroundColor #EDE7F6
+    BorderColor #4527A0
+    ArrowColor #1565C0
+    StartColor #1B5E20
+    EndColor #B71C1C
+    FontSize 11
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #F57F17
+}
+
+title State Machine Diagram: Physical Edge Device Lifecycle
+
+[*] --> Unregistered : Device powered on
+
+state Unregistered {
+    Unregistered : entry / initialize hardware probes
+    Unregistered : entry / generate UUID and key pair
+    Unregistered : do / poll coordinator endpoint
+    Unregistered : exit / send registration request
+}
+
+Unregistered --> Registered : registrationRequest(uuid, publicKey) [coordinator accepts]
+Unregistered --> Failed : registrationRequest [coordinator rejects]
+
+state Registered {
+    Registered : entry / receive device_id from coordinator
+    Registered : do / await authentication instruction
+    Registered : exit / send authentication request
+}
+
+Registered --> Authenticated : authenticateDevice(credentials) [credentials match]
+Registered --> Failed : authenticateDevice [max retries exceeded]
+Registered --> Offline : heartbeatTimeout(30s)
+
+state Authenticated {
+    Authenticated : entry / store session token
+    Authenticated : entry / start telemetry probe (CPU, RAM, battery, BW)
+    Authenticated : do / send periodic heartbeat
+    Authenticated : exit / stop heartbeat timer
+}
+
+Authenticated --> Available : registrationComplete() / report initial telemetry r_k
+Authenticated --> Offline : heartbeatTimeout(60s)
+
+state Available {
+    Available : entry / report resource telemetry r_k_t
+    Available : do / continuously report telemetry
+    Available : do / poll for round selection notification
+    Available : exit / acknowledge selection
+}
+
+Available --> SelectedForTraining : roundSelectionNotification(round_id) [MEM_free > MEM_min AND battery > E_min AND tau <= T_round]
+Available --> Offline : connectionLost()
+Available --> Authenticated : sessionTokenExpired() / re-authenticate
+
+state SelectedForTraining {
+    SelectedForTraining : entry / acknowledge selection to coordinator
+    SelectedForTraining : entry / prepare local training environment
+    SelectedForTraining : do / await global model broadcast
+    SelectedForTraining : exit / confirm model received
+}
+
+SelectedForTraining --> ReceivingGlobalModel : globalModelBroadcast(w_t, C_t, I_t)
+SelectedForTraining --> Available : deselected() [coordinator reallocated cohort]
+SelectedForTraining --> Offline : roundTimeout()
+
+state ReceivingGlobalModel {
+    ReceivingGlobalModel : entry / open downlink channel
+    ReceivingGlobalModel : do / receive global model w_t and parameters
+    ReceivingGlobalModel : exit / verify model checksum
+}
+
+ReceivingGlobalModel --> TrainingLocally : modelReceived() [checksum verified]
+ReceivingGlobalModel --> Offline : downloadFailed() [network error]
+
+state TrainingLocally {
+    TrainingLocally : entry / load local private dataset D_k
+    TrainingLocally : do / run E epochs of local SGD on D_k
+    TrainingLocally : do / apply error feedback residual
+    TrainingLocally : do / monitor CPU and memory usage
+    TrainingLocally : exit / compute update delta_w_k
+    TrainingLocally : exit / project onto shared mask I_t
+}
+
+note right of TrainingLocally
+    Local dataset D_k NEVER
+    leaves this device.
+    All computation is local.
+end note
+
+TrainingLocally --> ApplyingDifferentialPrivacy : trainingComplete() [E epochs finished]
+TrainingLocally --> Failed : trainingError() [out-of-memory or crash]
+TrainingLocally --> Offline : roundDeadlineExceeded() [tau > T_round]
+
+state ApplyingDifferentialPrivacy {
+    ApplyingDifferentialPrivacy : entry / retrieve C_t from coordinator broadcast
+    ApplyingDifferentialPrivacy : do / clip update to C_t - produces s_bar_k
+    ApplyingDifferentialPrivacy : do / compute indicator bit b_k
+    ApplyingDifferentialPrivacy : do / inject Gaussian noise (variance = sigma^2*C^2 / M_min)
+    ApplyingDifferentialPrivacy : do / perturb indicator bit
+    ApplyingDifferentialPrivacy : exit / produce (s_tilde_k, b_tilde_k)
+}
+
+ApplyingDifferentialPrivacy --> CompressingModelUpdate : dpApplied() [noise injected]
+ApplyingDifferentialPrivacy --> Failed : dpError() [numerical overflow]
+
+state CompressingModelUpdate {
+    CompressingModelUpdate : entry / concatenate update and indicator
+    CompressingModelUpdate : do / apply stochastic quantization mod R
+    CompressingModelUpdate : do / apply SecAgg pairwise and self-masks
+    CompressingModelUpdate : exit / produce masked upload y_k (K+1 dims)
+}
+
+CompressingModelUpdate --> UploadingModelUpdate : compressionComplete()
+CompressingModelUpdate --> Failed : compressionError()
+
+state UploadingModelUpdate {
+    UploadingModelUpdate : entry / open uplink channel
+    UploadingModelUpdate : do / transmit masked update y_k
+    UploadingModelUpdate : exit / confirm acknowledgment from coordinator
+}
+
+UploadingModelUpdate --> WaitingForNextRound : uploadComplete() [coordinator acknowledged]
+UploadingModelUpdate --> Offline : uploadFailed() [network failure - coordinator handles as dropout]
+
+state WaitingForNextRound {
+    WaitingForNextRound : entry / receive updated model w_(t+1) if re-selected
+    WaitingForNextRound : do / resume telemetry reporting
+    WaitingForNextRound : do / update error feedback buffer e_k_(t+1)
+    WaitingForNextRound : do / await next round notification
+    WaitingForNextRound : exit / prepare for next round
+}
+
+WaitingForNextRound --> Available : roundComplete() [coordinator confirms aggregation done]
+WaitingForNextRound --> SelectedForTraining : immediateReselection()
+WaitingForNextRound --> Offline : heartbeatLost()
+
+state Offline {
+    Offline : entry / stop telemetry and heartbeat
+    Offline : do / attempt periodic reconnection
+    Offline : exit / re-establish connection to coordinator
+}
+
+Offline --> Authenticated : reconnected() [session token still valid]
+Offline --> Registered : tokenExpired() [need to re-authenticate]
+Offline --> [*] : deviceShutdown() [permanent shutdown]
+
+state Failed {
+    Failed : entry / log failure event
+    Failed : entry / send error report to coordinator
+    Failed : do / attempt hardware recovery
+    Failed : exit / hardware and software reinitialized
+}
+
+Failed --> Unregistered : hardwareRecovered() [manual recovery complete]
+Failed --> [*] : permanentFailure() [unrecoverable hardware failure]
+
+@enduml

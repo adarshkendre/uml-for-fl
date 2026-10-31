@@ -1,0 +1,85 @@
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    %% =====================================================================
+    %% DATA FLOW DIAGRAM - LEVEL 0 (CONTEXT DIAGRAM)
+    %% Privacy-Preserving and Resource-Aware Federated Learning System
+    %% Notation: Mermaid flowchart approximating DFD Level 0
+    %%
+    %% DFD NOTATION GUIDE (Mermaid approximation):
+    %%   External Entities : rectangle []
+    %%   Central Process   : rounded rectangle (())
+    %%   Data Stores       : open-ended rectangle [( )] -- shown as cylinders
+    %%   Data Flows        : labeled arrows
+    %%
+    %% NOTE: True DFD Level 0 cannot be fully expressed in native Mermaid.
+    %% This file uses Mermaid's flowchart with shape approximations.
+    %% For strict Gane-Sarson or Yourdon-DeMarco DFD, use a dedicated tool
+    %% (e.g., draw.io, Lucidchart, or Structurizr DSL).
+    %% =====================================================================
+
+    %% -------------------------
+    %% External Entities
+    %% -------------------------
+    ADMIN["👤 Admin"]
+    SYSOP["👤 System Operator"]
+    ED["📱 Physical Edge Devices\n(Heterogeneous)"]
+
+    %% -------------------------
+    %% Central System Process (Process 0)
+    %% -------------------------
+    FLSYS(["0\nPrivacy-Preserving\nFederated Learning\nSystem"])
+
+    %% -------------------------
+    %% Data Flows: Admin → System
+    %% -------------------------
+    ADMIN -->|"Authentication Request\n(credentials)"| FLSYS
+    ADMIN -->|"Training Configuration\n(rounds, cohort_size, ε, δ, K, σ)"| FLSYS
+    ADMIN -->|"Device Management Commands\n(register, revoke)"| FLSYS
+
+    %% -------------------------
+    %% Data Flows: System → Admin
+    %% -------------------------
+    FLSYS -->|"Authentication Response\n(token / rejection)"| ADMIN
+    FLSYS -->|"Training Status\n(round progress, metrics)"| ADMIN
+    FLSYS -->|"Performance Reports\n(accuracy, ε_t, latency)"| ADMIN
+    FLSYS -->|"Device Status\n(registered, active devices)"| ADMIN
+
+    %% -------------------------
+    %% Data Flows: System Operator → System
+    %% -------------------------
+    SYSOP -->|"Authentication Request\n(credentials)"| FLSYS
+    SYSOP -->|"Monitoring Queries\n(device status, round state)"| FLSYS
+
+    %% -------------------------
+    %% Data Flows: System → System Operator
+    %% -------------------------
+    FLSYS -->|"Authentication Response\n(token / rejection)"| SYSOP
+    FLSYS -->|"Training Progress\n(round status, device health)"| SYSOP
+    FLSYS -->|"Resource Metrics\n(CPU, RAM, battery, network)"| SYSOP
+    FLSYS -->|"Alert Notifications\n(device failures, round aborts)"| SYSOP
+
+    %% -------------------------
+    %% Data Flows: Edge Devices → System
+    %% -------------------------
+    ED -->|"Device Registration Request\n(device_uuid, public_key)"| FLSYS
+    ED -->|"Authentication Request\n(device credentials)"| FLSYS
+    ED -->|"Resource Capability Telemetry\n(r_k^t: CPU, RAM, battery, BW)"| FLSYS
+    ED -->|"Masked Model Updates y_k^t\n(K+1 dim, protected via DP+SecAgg)"| FLSYS
+    ED -.->|"⚠️ Raw Local Datasets D_k\nNEVER TRANSMITTED"| ED
+
+    %% -------------------------
+    %% Data Flows: System → Edge Devices
+    %% -------------------------
+    FLSYS -->|"Registration Confirmation\n(device_id, credentials)"| ED
+    FLSYS -->|"Authentication Token\n(session key)"| ED
+    FLSYS -->|"Global Model Broadcast\n(w^t, C^t, I_t or seed_t)"| ED
+    FLSYS -->|"Training Instructions\n(local epochs E, round parameters)"| ED
+    FLSYS -->|"Round Start Notification"| ED
+
+    %% Styling
+    classDef external fill:#37474f,stroke:#546e7a,color:#fff,font-weight:bold
+    classDef process fill:#1a237e,stroke:#0d47a1,color:#fff,font-size:14px,font-weight:bold
+    classDef boundary stroke-dasharray:5 5
+
+    class ADMIN,SYSOP,ED external
+    class FLSYS process

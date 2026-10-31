@@ -1,0 +1,213 @@
+@startuml object_diagram
+'=======================================================================
+' OBJECT DIAGRAM
+' Runtime Snapshot During One Training Round
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML
+'=======================================================================
+
+!theme cerulean-outline
+skinparam object {
+    BackgroundColor #EDE7F6
+    BorderColor #4527A0
+    ArrowColor #1565C0
+    FontSize 11
+    HeaderBackgroundColor #4527A0
+    HeaderFontColor #FFFFFF
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #F57F17
+}
+
+title Object Diagram: Runtime Snapshot During Training Round 1
+
+object "flCoordinator1 : FederatedLearningCoordinator" as FL_COORD {
+    cohortSize = 3
+    dropoutMax = 1
+    roundDeadline = 120.0
+    registeredDevicesCount = 10
+}
+
+object "trainingRound1 : TrainingRound" as TR1 {
+    roundId = 1
+    targetCohortSize = 3
+    survivingCohortSize = 3
+    dMaxTolerated = 1
+    activeCoordinatesK = 6000
+    clippingThreshold_C = 1.0
+    noiseMultiplierSigma = 1.1
+    roundStatus = "in_progress"
+    startedAt = "2026-10-31T08:00:00"
+    dropoutCount = 0
+}
+
+object "globalModel1 : Model" as GM1 {
+    modelId = 1
+    modelVersion = 3
+    parameterCount = 120000
+    validationAccuracy = 0.842
+    validationLoss = 0.421
+    createdAt = "2026-10-31T07:45:00"
+}
+
+object "edgeDevice1 : EdgeDevice" as ED1 {
+    deviceId = 1
+    deviceName = "RPi-Node-01"
+    deviceType = "Raspberry Pi 4"
+    status = "TrainingLocally"
+    cpuCores = 4.0
+    ramMb = 4096
+}
+
+object "edgeDevice2 : EdgeDevice" as ED2 {
+    deviceId = 2
+    deviceName = "Jetson-Node-01"
+    deviceType = "NVIDIA Jetson Nano"
+    status = "ApplyingDifferentialPrivacy"
+    cpuCores = 4.0
+    ramMb = 4096
+}
+
+object "edgeDevice3 : EdgeDevice" as ED3 {
+    deviceId = 3
+    deviceName = "SBC-Node-01"
+    deviceType = "Generic SBC"
+    status = "CompressingModelUpdate"
+    cpuCores = 2.0
+    ramMb = 2048
+}
+
+object "localModel1 : Model" as LM1 {
+    modelId = 101
+    modelVersion = 3
+    parameterCount = 120000
+    validationAccuracy = 0.856
+    validationLoss = 0.388
+}
+
+object "localModel2 : Model" as LM2 {
+    modelId = 102
+    modelVersion = 3
+    parameterCount = 120000
+    validationAccuracy = 0.831
+    validationLoss = 0.447
+}
+
+object "localModel3 : Model" as LM3 {
+    modelId = 103
+    modelVersion = 3
+    parameterCount = 120000
+    validationAccuracy = 0.849
+    validationLoss = 0.412
+}
+
+object "modelUpdate1 : ModelUpdate" as MU1 {
+    updateId = 201
+    roundId = 1
+    deviceId = 1
+    dpApplied = true
+    sparsificationApplied = true
+    secaggMasked = true
+    updateNormBeforeClip = 1.24
+    clippedNorm = 1.0
+    transmittedCoordinates = 6000
+    updateStatus = "transmitted"
+}
+
+object "modelUpdate2 : ModelUpdate" as MU2 {
+    updateId = 202
+    roundId = 1
+    deviceId = 2
+    dpApplied = true
+    sparsificationApplied = true
+    secaggMasked = false
+    updateNormBeforeClip = 0.87
+    clippedNorm = 0.87
+    updateStatus = "pending"
+}
+
+object "modelUpdate3 : ModelUpdate" as MU3 {
+    updateId = 203
+    roundId = 1
+    deviceId = 3
+    dpApplied = false
+    sparsificationApplied = true
+    secaggMasked = false
+    updateNormBeforeClip = 1.05
+    clippedNorm = 1.0
+    updateStatus = "pending"
+}
+
+object "secureAggregator1 : SecureAggregator" as SA1 {
+    cohortSize = 3
+    dropoutTolerance = 1
+    ringModulus = 4294967296
+    activeSurvivors = 3
+}
+
+object "globalAggregator1 : GlobalAggregator" as GA1 {
+    activeCoordinatesK = 6000
+}
+
+object "deviceMetrics1 : DeviceMetrics" as DM1 {
+    metricId = 301
+    deviceId = 1
+    roundId = 1
+    cpuUsagePercent = 78.4
+    ramFreeMb = 2841.0
+    uplinkBwBps = 5242880
+    estimatedRoundLatency = 94.3
+    admittedToRound = true
+}
+
+' Links
+FL_COORD --> TR1 : manages
+FL_COORD --> GM1 : distributes
+FL_COORD --> SA1 : triggers
+FL_COORD --> GA1 : invokes
+
+TR1 --> ED1 : includes
+TR1 --> ED2 : includes
+TR1 --> ED3 : includes
+
+ED1 --> LM1 : trained
+ED2 --> LM2 : trained
+ED3 --> LM3 : trained
+
+ED1 --> MU1 : submitted
+ED2 --> MU2 : preparing
+ED3 --> MU3 : preparing
+
+MU1 --> TR1 : belongsTo
+MU2 --> TR1 : belongsTo
+MU3 --> TR1 : belongsTo
+
+MU1 --> GM1 : derivedFrom
+MU2 --> GM1 : derivedFrom
+MU3 --> GM1 : derivedFrom
+
+SA1 --> GA1 : feedsCohortSum
+GA1 --> GM1 : willProduce
+
+ED1 --> DM1 : reportedMetrics
+
+note right of MU2
+    Device 2 still applying
+    Differential Privacy.
+    Not yet transmitted.
+end note
+
+note right of MU3
+    Device 3 still in
+    SecAgg masking step.
+end note
+
+note bottom of SA1
+    Waiting for all 3 masked
+    uploads before unmasking.
+    Dropout recovery ready.
+end note
+
+@enduml

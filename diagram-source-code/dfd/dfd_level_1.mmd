@@ -1,0 +1,148 @@
+%%{init: {'theme': 'base'}}%%
+flowchart TB
+    %% =====================================================================
+    %% DATA FLOW DIAGRAM - LEVEL 1
+    %% Privacy-Preserving and Resource-Aware Federated Learning System
+    %% Notation: Mermaid flowchart approximating Yourdon-DeMarco DFD Level 1
+    %%
+    %% DFD NOTATION APPROXIMATIONS:
+    %%   External Entities : rectangle []
+    %%   Processes         : rounded rectangle (( )) with process ID
+    %%   Data Stores       : cylinder [( )] shape
+    %%   Data Flows        : labeled directed arrows
+    %%
+    %% Processes:
+    %%   P1 - User Authentication and Device Registration
+    %%   P2 - FL Configuration and Coordination
+    %%   P3 - Local Model Training
+    %%   P4 - Privacy Protection and Model Compression
+    %%   P5 - Secure Aggregation and Global Model Update
+    %%   P6 - Monitoring and Reporting
+    %% =====================================================================
+
+    %% -------------------------
+    %% External Entities
+    %% -------------------------
+    ADMIN["👤 Admin"]
+    SYSOP["👤 System Operator"]
+    ED["📱 Physical Edge Devices"]
+
+    %% -------------------------
+    %% Processes
+    %% -------------------------
+    P1(["P1\nUser Authentication\n& Device Registration"])
+    P2(["P2\nFL Configuration\n& Coordination"])
+    P3(["P3\nLocal Model\nTraining"])
+    P4(["P4\nPrivacy Protection\n& Model Compression"])
+    P5(["P5\nSecure Aggregation\n& Global Model Update"])
+    P6(["P6\nMonitoring\n& Reporting"])
+
+    %% -------------------------
+    %% Data Stores
+    %% -------------------------
+    DS1[("D1\nUsers &\nAuth Sessions")]
+    DS2[("D2\nEdge Device\nRegistry")]
+    DS3[("D3\nTraining\nRounds")]
+    DS4[("D4\nModels")]
+    DS5[("D5\nModel Updates\n(Metadata)")]
+    DS6[("D6\nDevice\nMetrics")]
+    DS7[("D7\nTraining\nMetrics")]
+    DS8[("D8\nAudit\nLogs")]
+
+    %% =====================================================================
+    %% P1: User Authentication and Device Registration
+    %% =====================================================================
+    ADMIN -->|"Login credentials"| P1
+    SYSOP -->|"Login credentials"| P1
+    ED -->|"Device registration request\n(uuid, public_key)"| P1
+    ED -->|"Device auth request\n(device credentials)"| P1
+
+    P1 -->|"Authenticated session token"| ADMIN
+    P1 -->|"Authenticated session token"| SYSOP
+    P1 -->|"Registration confirmation\n(device_id)"| ED
+    P1 -->|"Auth token for device"| ED
+
+    P1 -->|"Write user record"| DS1
+    P1 -->|"Read user credentials"| DS1
+    P1 -->|"Write device record"| DS2
+    P1 -->|"Read device credentials"| DS2
+    P1 -->|"Write auth event"| DS8
+
+    %% =====================================================================
+    %% P2: FL Configuration and Coordination
+    %% =====================================================================
+    ADMIN -->|"Training config\n(M, K, ε, δ, σ, T_round)"| P2
+    P1 -->|"Validated admin session"| P2
+    DS2 -->|"Registered device list"| P2
+    DS6 -->|"Device resource telemetry r_k^t"| P2
+
+    P2 -->|"Round initialization"| DS3
+    P2 -->|"Selected cohort S_t\n(w^t, C^t, I_t)"| ED
+    P2 -->|"Global model w^t\nfor distribution"| DS4
+    P2 -->|"Round start notification"| P3
+    P2 -->|"Round config\n(M_min, D_max, K)"| P4
+    P2 -->|"Round metadata\n(non-sensitive)"| P6
+
+    ED -->|"Resource telemetry r_k^t\n(CPU, RAM, battery, BW)"| P2
+
+    %% =====================================================================
+    %% P3: Local Model Training
+    %% =====================================================================
+    P2 -->|"Global model w^t\nTraining params E"| P3
+    ED -->|"Local training execution\n(SGD on D_k)"| P3
+
+    P3 -->|"Raw local update Δw_k^t"| P4
+    P3 -->|"Training completion status"| P2
+
+    %% NOTE: Local dataset D_k never flows out
+    note1["⚠️ Local Dataset D_k\nStays exclusively on Edge Device\nNot transmitted anywhere"]
+
+    %% =====================================================================
+    %% P4: Privacy Protection and Model Compression
+    %% =====================================================================
+    P3 -->|"Raw update Δw_k^t"| P4
+    P2 -->|"C^t, I_t, σ_model, M_min"| P4
+
+    P4 -->|"Protected masked update y_k^t\n(K+1 dimensions)"| P5
+    P4 -->|"Update metadata\n(norm, indicator_bit)"| DS5
+
+    %% =====================================================================
+    %% P5: Secure Aggregation and Global Model Update
+    %% =====================================================================
+    P4 -->|"Masked vectors y_k^t\nfrom all surviving devices"| P5
+    DS4 -->|"Current global model w^t"| P5
+    DS3 -->|"Round parameters"| P5
+
+    P5 -->|"Unmasked noisy cohort sum S~^t"| P5
+    P5 -->|"Updated global model w^(t+1)"| DS4
+    P5 -->|"Aggregation results\n(accuracy, loss)"| DS7
+    P5 -->|"Updated global model w^(t+1)"| ED
+    P5 -->|"Round completion status"| DS3
+    P5 -->|"Aggregation event"| DS8
+
+    %% =====================================================================
+    %% P6: Monitoring and Reporting
+    %% =====================================================================
+    P2 -->|"Round metadata (async)"| P6
+    DS7 -->|"Training metrics"| P6
+    DS6 -->|"Device resource data"| P6
+    DS8 -->|"Audit log entries"| P6
+
+    P6 -->|"Training dashboard data\n(accuracy, ε_t, latency)"| ADMIN
+    P6 -->|"System status report\n(device health, round state)"| SYSOP
+    P6 -->|"Performance reports"| ADMIN
+    P6 -->|"Alert notifications"| SYSOP
+    P6 -->|"Written performance report"| DS7
+
+    ED -->|"Device metrics"| DS6
+
+    %% Styling
+    classDef external fill:#37474f,stroke:#546e7a,color:#fff,font-weight:bold
+    classDef process fill:#1a237e,stroke:#0d47a1,color:#fff
+    classDef datastore fill:#e65100,stroke:#bf360c,color:#fff
+    classDef note fill:#fff3e0,stroke:#ff6f00,color:#333
+
+    class ADMIN,SYSOP,ED external
+    class P1,P2,P3,P4,P5,P6 process
+    class DS1,DS2,DS3,DS4,DS5,DS6,DS7,DS8 datastore
+    class note1 note

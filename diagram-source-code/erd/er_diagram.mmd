@@ -1,0 +1,190 @@
+---
+title: "Entity Relationship Diagram - Privacy-Preserving Federated Learning System"
+---
+erDiagram
+
+    %% =====================================================================
+    %% ENTITY RELATIONSHIP DIAGRAM (ERD)
+    %% Privacy-Preserving and Resource-Aware Federated Learning
+    %% Notation: Mermaid erDiagram (Crow's Foot)
+    %% =====================================================================
+
+    %% -------------------------
+    %% USERS Entity
+    %% -------------------------
+    Users {
+        INT         user_id         PK
+        VARCHAR(50) username
+        VARCHAR(255) password_hash
+        VARCHAR(100) email
+        ENUM        role            "admin | operator"
+        BOOLEAN     is_active
+        TIMESTAMP   created_at
+        TIMESTAMP   last_login_at
+    }
+
+    %% -------------------------
+    %% AuthenticationSessions Entity
+    %% -------------------------
+    AuthenticationSessions {
+        INT         session_id      PK
+        INT         user_id         FK
+        VARCHAR(512) token_hash
+        TIMESTAMP   issued_at
+        TIMESTAMP   expires_at
+        VARCHAR(45) ip_address
+        BOOLEAN     is_revoked
+    }
+
+    %% -------------------------
+    %% EdgeDevices Entity
+    %% -------------------------
+    EdgeDevices {
+        INT         device_id       PK
+        VARCHAR(100) device_name
+        VARCHAR(100) device_type    "RPi | Jetson | Container"
+        VARCHAR(64) device_uuid
+        VARCHAR(255) public_key_hash
+        ENUM        status          "unregistered | registered | authenticated | available | offline | failed"
+        FLOAT       cpu_cores
+        INT         ram_mb
+        BOOLEAN     battery_available
+        TIMESTAMP   registered_at
+        TIMESTAMP   last_seen_at
+    }
+
+    %% -------------------------
+    %% TrainingRounds Entity
+    %% -------------------------
+    TrainingRounds {
+        INT         round_id        PK
+        INT         target_cohort_size
+        INT         surviving_cohort_size
+        INT         d_max_tolerated
+        INT         active_coordinates_k
+        FLOAT       clipping_threshold_C
+        FLOAT       noise_multiplier_sigma
+        FLOAT       noise_multiplier_sigma_b
+        ENUM        round_status    "initializing | in_progress | aggregating | completed | failed | aborted"
+        TIMESTAMP   started_at
+        TIMESTAMP   completed_at
+        FLOAT       round_latency_seconds
+        INT         dropout_count
+    }
+
+    %% -------------------------
+    %% Models Entity
+    %% -------------------------
+    Models {
+        INT         model_id        PK
+        INT         round_id        FK
+        ENUM        model_type      "global | local"
+        INT         parameter_count
+        INT         model_version
+        VARCHAR(255) model_artifact_path
+        FLOAT       validation_accuracy
+        FLOAT       validation_loss
+        TIMESTAMP   created_at
+    }
+
+    %% -------------------------
+    %% ModelUpdates Entity
+    %% -------------------------
+    ModelUpdates {
+        INT         update_id       PK
+        INT         round_id        FK
+        INT         device_id       FK
+        INT         model_id        FK
+        BOOLEAN     dp_applied
+        BOOLEAN     sparsification_applied
+        BOOLEAN     secagg_masked
+        FLOAT       update_norm_before_clip
+        FLOAT       clipped_norm
+        BOOLEAN     indicator_bit
+        INT         transmitted_coordinates
+        FLOAT       transmission_time_seconds
+        ENUM        update_status   "pending | transmitted | aggregated | rejected"
+        TIMESTAMP   created_at
+    }
+
+    %% -------------------------
+    %% DeviceMetrics Entity
+    %% -------------------------
+    DeviceMetrics {
+        INT         metric_id       PK
+        INT         device_id       FK
+        INT         round_id        FK
+        FLOAT       cpu_usage_percent
+        FLOAT       ram_free_mb
+        FLOAT       battery_energy_joules
+        FLOAT       uplink_bw_bps
+        FLOAT       downlink_bw_bps
+        FLOAT       estimated_round_latency_seconds
+        BOOLEAN     admitted_to_round
+        TIMESTAMP   recorded_at
+    }
+
+    %% -------------------------
+    %% TrainingMetrics Entity
+    %% -------------------------
+    TrainingMetrics {
+        INT         metric_id       PK
+        INT         round_id        FK
+        FLOAT       global_validation_accuracy
+        FLOAT       global_validation_loss
+        FLOAT       cumulative_epsilon
+        FLOAT       delta
+        FLOAT       noise_inflation_factor
+        FLOAT       aggregation_latency_seconds
+        FLOAT       secagg_unmasking_latency_seconds
+        INT         participating_devices
+        TIMESTAMP   recorded_at
+    }
+
+    %% -------------------------
+    %% RoundDeviceParticipation Entity (join table)
+    %% -------------------------
+    RoundDeviceParticipation {
+        INT         participation_id PK
+        INT         round_id         FK
+        INT         device_id        FK
+        BOOLEAN     selected_for_round
+        BOOLEAN     completed_successfully
+        ENUM        failure_reason   "timeout | resource | network | none"
+        TIMESTAMP   participation_at
+    }
+
+    %% -------------------------
+    %% AuditLogs Entity
+    %% -------------------------
+    AuditLogs {
+        INT         log_id          PK
+        INT         user_id         FK "nullable"
+        INT         device_id       FK "nullable"
+        INT         round_id        FK "nullable"
+        VARCHAR(100) event_type
+        TEXT        event_description
+        VARCHAR(45) source_ip
+        TIMESTAMP   event_timestamp
+    }
+
+    %% =====================================================================
+    %% RELATIONSHIPS (Crow's Foot Notation)
+    %% =====================================================================
+
+    Users ||--o{ AuthenticationSessions : "has"
+    Users ||--o{ AuditLogs : "generates"
+
+    EdgeDevices ||--o{ ModelUpdates : "submits"
+    EdgeDevices ||--o{ DeviceMetrics : "reports"
+    EdgeDevices ||--o{ RoundDeviceParticipation : "participates_in"
+    EdgeDevices ||--o{ AuditLogs : "generates"
+
+    TrainingRounds ||--o{ ModelUpdates : "receives"
+    TrainingRounds ||--o{ DeviceMetrics : "measures"
+    TrainingRounds ||--o{ TrainingMetrics : "produces"
+    TrainingRounds ||--o{ RoundDeviceParticipation : "includes"
+    TrainingRounds ||--o{ AuditLogs : "logged_in"
+    TrainingRounds ||--o{ Models : "produces"
+
+    Models ||--o{ ModelUpdates : "references"

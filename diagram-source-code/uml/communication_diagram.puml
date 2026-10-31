@@ -1,0 +1,139 @@
+@startuml communication_diagram
+'=======================================================================
+' COMMUNICATION DIAGRAM (Collaboration Diagram)
+' Federated Learning Round Interactions
+' Privacy-Preserving and Resource-Aware Federated Learning System
+' Standard: OMG UML 2.5.1
+' Notation: PlantUML (numbered messages consistent with
+'           UML Communication Diagram semantics)
+'
+' NOTE: PlantUML does not natively support free-form Communication
+' Diagram layout. This file uses sequence notation with strictly
+' numbered messages following UML 2.5.1 Communication Diagram
+' numbering conventions (1, 1.1, 1.2, 2, 2.1, ...).
+' For a true spatial Communication Diagram layout, import these
+' numbered messages into draw.io or Lucidchart.
+'=======================================================================
+
+!theme cerulean-outline
+skinparam sequence {
+    ArrowColor #1565C0
+    ActorBorderColor #1B5E20
+    ActorBackgroundColor #E8F5E9
+    ParticipantBorderColor #4527A0
+    ParticipantBackgroundColor #EDE7F6
+    NoteBackgroundColor #FFF9C4
+    NoteBorderColor #F57F17
+}
+skinparam roundcorner 8
+
+title Communication Diagram: Federated Learning Round\nNumbered Messages (UML 2.5.1)
+
+participant ":Dashboard" as DASH
+participant ":BackendAPI" as API
+participant ":FLCoordinator" as COORD
+participant ":EdgeDevice" as ED
+participant ":LocalTrainer" as LT
+participant ":DifferentialPrivacy" as DP
+participant ":ModelCompressor" as MC
+participant ":SecureAggregator" as SA
+participant ":GlobalAggregator" as GA
+database ":Database" as DB
+
+note over DASH,DB
+    Object Links in Communication Diagram:
+    Dashboard -- BackendAPI
+    BackendAPI -- FLCoordinator -- Database
+    FLCoordinator -- EdgeDevice (1 to many)
+    EdgeDevice -- LocalTrainer
+    EdgeDevice -- DifferentialPrivacy
+    EdgeDevice -- ModelCompressor
+    EdgeDevice -- SecureAggregator (client masking)
+    FLCoordinator -- SecureAggregator (server unmasking)
+    FLCoordinator -- GlobalAggregator -- Database
+end note
+
+DASH -> API : 1: login(username, password)
+API -> DB : 1.1: validateUser(credentials)
+DB --> API : 1.2: userRecord
+API --> DASH : 1.3: authToken(JWT)
+
+DASH -> API : 2: configureTraining(M, K, epsilon, delta, sigma, T_round, E)
+API -> COORD : 2.1: forwardConfig(trainingConfig)
+COORD -> DB : 2.2: insertTrainingRound(config)
+DB --> COORD : 2.3: roundId
+COORD --> API : 2.4: configured(roundId)
+API --> DASH : 2.5: configurationConfirmed(roundId)
+
+DASH -> API : 3: startRound(roundId)
+API -> COORD : 3.1: startRound(roundId)
+COORD -> DB : 3.2: queryDeviceMetrics()
+DB --> COORD : 3.3: candidateDeviceList
+COORD -> COORD : 3.4: selectEligibleDevices(candidates, deadline)
+COORD -> DB : 3.5: updateRoundStatus(in_progress, selectedDevices)
+
+COORD -> DB : 4: getLatestGlobalModel()
+DB --> COORD : 4.1: globalModel_w_t
+COORD -> ED : 4.2: broadcast(w_t, C_t, I_t, roundParams)
+ED --> COORD : 4.3: acknowledgeBroadcast()
+
+ED -> LT : 5: trainLocalModel(w_t, D_k, E)
+note right of LT
+    D_k NEVER leaves device.
+    All training is local.
+end note
+LT -> LT : 5.1: runSGDEpochs(model, D_k, E)
+LT -> LT : 5.2: computeUpdate(w_local, w_t)
+LT --> ED : 5.3: rawUpdate(delta_w_k)
+
+ED -> MC : 6: applySparsification(delta_w_k, errorBuffer_e_k, I_t)
+MC -> MC : 6.1: addErrorFeedback(delta_w_k, e_k)
+MC -> MC : 6.2: projectOnMask(u_k, I_t) -> s_k in R^K
+MC -> MC : 6.3: updateErrorBuffer(residual)
+MC --> ED : 6.4: sparsifiedUpdate(s_k, e_k_next)
+
+ED -> DP : 7: applyDifferentialPrivacy(s_k, C_t, sigma_model, M_min)
+DP -> DP : 7.1: clipNorm(s_k, C_t) -> s_bar_k
+DP -> DP : 7.2: computeIndicatorBit(norm_s_k, C_t) -> b_k
+DP -> DP : 7.3: injectGaussianNoise(s_bar_k, sigma, M_min) -> s_tilde_k
+DP -> DP : 7.4: perturbIndicatorBit(b_k, sigma_b, M_min) -> b_tilde_k
+DP --> ED : 7.5: dpProtectedUpdate(s_tilde_k, b_tilde_k)
+
+ED -> MC : 8: stochasticQuantize(s_tilde_k, b_tilde_k, f, R)
+MC -> MC : 8.1: concatenateVector([s_tilde_k; b_tilde_k]) -> v_k
+MC -> MC : 8.2: sampleDither() -> xi_k ~ Uniform
+MC -> MC : 8.3: applyRounding(v_k, xi_k, f, R) -> v_hat_k mod R
+MC --> ED : 8.4: quantizedVector(v_hat_k in Z_R^(K+1))
+
+ED -> SA : 9: applyMask(v_hat_k, deviceId, cohortIds)
+SA -> SA : 9.1: generateSelfMask(PRG(r_k))
+SA -> SA : 9.2: generatePairwiseMasks(PRG(s_kj))
+SA -> SA : 9.3: applyModularMasks(v_hat_k) -> y_k
+SA --> ED : 9.4: maskedUpload(y_k) K+1 dimensions
+ED -> COORD : 9.5: uploadMaskedUpdate(y_k, roundId)
+
+COORD -> SA : 10: unmaskCohortSum(maskedVectors, survivorIds)
+SA -> SA : 10.1: recoverDroppedMasks(secretShares) if dropout occurred
+SA -> SA : 10.2: computeModularSum(maskedVectors) -> cohortSum
+SA --> COORD : 10.3: noisyCohortSum(S_tilde, B_tilde)
+
+COORD -> GA : 11: aggregateUpdates(S_tilde, I_t, survivorCount, w_t)
+GA -> GA : 11.1: embedSparseUpdate(S_tilde, I_t) -> d-dim
+GA -> GA : 11.2: updateGlobalModel() -> w_(t+1)
+GA -> GA : 11.3: updateClippingThreshold() -> C_(t+1)
+GA -> GA : 11.4: updateRDPAccountant() -> epsilon_t
+GA -> GA : 11.5: evaluateModel(w_(t+1))
+GA --> COORD : 11.6: aggregationResult(w_(t+1), accuracy, loss, epsilon_t, C_(t+1))
+
+COORD -> DB : 12: storeUpdatedModel(w_(t+1), accuracy, roundId)
+DB --> COORD : 12.1: modelId
+COORD -> DB : 12.2: storeTrainingMetrics(roundId, accuracy, epsilon_t, latency)
+DB --> COORD : 12.3: metricId
+COORD -> DB : 12.4: updateRoundStatus(completed)
+
+COORD -> ED : 13: distributeGlobalModel(w_(t+1))
+
+COORD -> DASH : 14: asyncMetadataUpdate(roundId, accuracy, epsilon_t, latency)
+DASH -> DASH : 14.1: refreshUI(trainingProgress, privacyBudget)
+
+@enduml
