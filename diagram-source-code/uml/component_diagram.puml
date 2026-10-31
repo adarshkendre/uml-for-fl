@@ -14,21 +14,9 @@ skinparam component {
     ArrowColor #1565C0
     FontSize 11
 }
-skinparam interface {
-    BackgroundColor #E8F5E9
-    BorderColor #1B5E20
-}
 skinparam node {
     BackgroundColor #E3F2FD
     BorderColor #1565C0
-}
-skinparam package {
-    BackgroundColor #F3E5F5
-    BorderColor #6A1B9A
-}
-skinparam note {
-    BackgroundColor #FFF9C4
-    BorderColor #F57F17
 }
 
 title Component Diagram: Software Architecture\nPrivacy-Preserving Federated Learning System
@@ -38,52 +26,23 @@ title Component Diagram: Software Architecture\nPrivacy-Preserving Federated Lea
 ' -----------------------------------------------------------------------
 node "Central FL Server" as SERVER #E8EAF6 {
 
-    package "Presentation Layer" {
-        [Web Dashboard] as WEBDASH
-    }
+    [Web Dashboard] as WEBDASH
+    [Backend API] as API
+    [Authentication Service] as AUTH
+    [FL Coordinator] as FLCOORD
+    [Global Aggregator] as GLOBAGG
+    [Secure Aggregator] as SECAGG
+    [Database] as DB
 
-    package "API Layer" {
-        [Backend API Server] as API
-        [Authentication Service] as AUTHSVC
-    }
-
-    package "FL Coordination Layer" {
-        [FL Coordinator] as FLCOORD
-        [Global Aggregation Component] as GLOBAGG
-        [SecAgg Unmasking Component] as SECAGG_SVR
-        [Monitoring Component] as MONITOR
-        [RDP Privacy Accountant] as RDPACC
-    }
-
-    package "Data Layer" {
-        [Database Component] as DBCOMP
-    }
-
-    ' Provided Interfaces
-    interface "IUserAuth" as IUSERAUTH
-    interface "IDeviceRegistry" as IDEVREGISTRY
-    interface "IFLConfig" as IFLCONFIG
-    interface "IDatabase" as IDBINTERFACE
-
-    AUTHSVC -up- IUSERAUTH
-    FLCOORD -up- IDEVREGISTRY
-    FLCOORD -up- IFLCONFIG
-    DBCOMP -up- IDBINTERFACE
-
-    ' Internal wiring - Server
-    WEBDASH --> API : HTTP REST / WebSocket
-    API --> AUTHSVC : validate credentials
-    API --> FLCOORD : forward training config
-    API --> MONITOR : fetch dashboard data
-    FLCOORD --> SECAGG_SVR : trigger unmasking
+    WEBDASH --> API : HTTPS
+    API --> AUTH : validate credentials
+    API --> FLCOORD : training config
+    FLCOORD --> SECAGG : trigger unmasking
     FLCOORD --> GLOBAGG : aggregate updates
-    FLCOORD --> RDPACC : update privacy budget
-    FLCOORD --> DBCOMP : persist round state
-    GLOBAGG --> DBCOMP : store global model
-    SECAGG_SVR --> GLOBAGG : pass noisy cohort sum
-    MONITOR --> DBCOMP : read metrics
-    RDPACC --> DBCOMP : log privacy expenditure
-    AUTHSVC --> DBCOMP : read/write user records
+    SECAGG --> GLOBAGG : noisy cohort sum
+    GLOBAGG --> DB : store global model
+    FLCOORD --> DB : persist round state
+    API --> DB : read / write
 }
 
 ' -----------------------------------------------------------------------
@@ -91,67 +50,29 @@ node "Central FL Server" as SERVER #E8EAF6 {
 ' -----------------------------------------------------------------------
 node "Physical Edge Device k" as EDGEDEV #E8F5E9 {
 
-    package "FL Client Layer" {
-        [FL Client Component] as FLCLIENT
-        [Local Training Component] as LOCALTRAINER
-    }
+    [FL Client] as FLCLIENT
+    [Local Trainer] as LOCALTRAINER
+    [Privacy & Compression\n(DP + Sparsification + Quantization)] as DPMC
+    [SecAgg Masking] as SECAGG_CLI
+    database "Local Dataset D_k\n(Stays on Device)" as LOCALDATA
 
-    package "Privacy and Security Layer" {
-        [Differential Privacy Component] as DPCOMP
-        [Model Compression Component] as MCCOMP
-        [SecAgg Masking Component] as SECAGG_CLI
-    }
-
-    package "Observability Layer" {
-        [Telemetry Probe] as TELPROBE
-    }
-
-    package "Local Data" {
-        database "Local Dataset D_k\n(STAYS ON DEVICE)" as LOCALDATA
-    }
-
-    ' Required Interfaces
-    interface "IModelReceive" as IMODELRECEIVE
-    interface "IUpdateUpload" as IUPDATEUPLOAD
-    interface "ITelemetry" as ITELEMETRY
-
-    FLCLIENT -down- IMODELRECEIVE
-    FLCLIENT -down- IUPDATEUPLOAD
-    TELPROBE -down- ITELEMETRY
-
-    ' Internal wiring - Edge Device
-    FLCLIENT --> LOCALTRAINER : trigger local training
-    LOCALTRAINER --> LOCALDATA : read training samples
-    LOCALTRAINER --> DPCOMP : pass raw update
-    DPCOMP --> MCCOMP : noisy clipped update
-    MCCOMP --> SECAGG_CLI : quantized K+1 vector
+    FLCLIENT --> LOCALTRAINER : trigger training
+    LOCALTRAINER --> LOCALDATA : read training data
+    LOCALTRAINER --> DPMC : raw update
+    DPMC --> SECAGG_CLI : protected update
     SECAGG_CLI --> FLCLIENT : masked upload y_k
 }
 
 ' -----------------------------------------------------------------------
-' INTER-NODE CONNECTIONS
+' INTER-NODE COMMUNICATION
 ' -----------------------------------------------------------------------
-
-FLCOORD ..> IMODELRECEIVE : broadcast (w_t, C_t, I_t)
-IUPDATEUPLOAD ..> FLCOORD : upload masked y_k
-ITELEMETRY ..> FLCOORD : device telemetry r_k_t
+FLCOORD ..> FLCLIENT : broadcast global model
+FLCLIENT ..> FLCOORD : upload masked update y_k
+FLCLIENT ..> FLCOORD : resource telemetry
 
 note right of LOCALDATA
-    Raw dataset D_k
-    NEVER transmitted.
-    All training is local.
-end note
-
-note bottom of SECAGG_SVR
-    Server sees ONLY cohort sum.
-    Individual updates hidden.
-    Dropout recovery via secret shares.
-end note
-
-note bottom of DPCOMP
-    Noise variance calibrated to M_min.
-    Adaptive L2 clipping C_t.
-    Shared-mask sparsification on I_t.
+    Raw data NEVER
+    transmitted to server.
 end note
 
 @enduml

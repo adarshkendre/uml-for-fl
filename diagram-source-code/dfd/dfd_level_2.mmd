@@ -3,122 +3,74 @@ flowchart TB
     %% =====================================================================
     %% DATA FLOW DIAGRAM - LEVEL 2
     %% Privacy-Preserving and Resource-Aware Federated Learning System
-    %% 
-    %% Expands Level 1 Processes:
-    %%   P2 - FL Configuration and Coordination  → P2.1, P2.2, P2.3, P2.4
-    %%   P3 - Local Model Training               → P3.1, P3.2
-    %%   P4 - Privacy Protection & Compression   → P4.1, P4.2, P4.3, P4.4
-    %%   P5 - Secure Aggregation & Global Update → P5.1, P5.2, P5.3, P5.4, P5.5
+    %%
+    %% Expands Level 1 Processes P2–P5 into sub-processes:
+    %%   P2: FL Coordination    → P2.1 Select Devices, P2.2 Distribute Model
+    %%   P3: Local Training     → P3.1 Train, P3.2 Compute Update
+    %%   P4: Privacy & Compress → P4.1 Differential Privacy, P4.2 Sparsify & Quantize, P4.3 SecAgg Mask
+    %%   P5: Aggregation        → P5.1 Unmask, P5.2 Aggregate, P5.3 Evaluate & Store
     %%
     %% Notation: Mermaid flowchart (Yourdon-DeMarco DFD approximation)
     %% =====================================================================
 
-    %% -------------------------
     %% External Entities
-    %% -------------------------
-    ADMIN["👤 Admin"]
-    ED["📱 Physical Edge Devices"]
+    ADMIN["Admin"]
+    ED["Physical Edge Devices"]
 
-    %% -------------------------
     %% Data Stores
-    %% -------------------------
-    DS2[("D2: Edge Device Registry")]
-    DS3[("D3: Training Rounds")]
-    DS4[("D4: Models")]
-    DS5[("D5: Model Updates")]
-    DS6[("D6: Device Metrics")]
-    DS7[("D7: Training Metrics")]
+    DS2[("D2: Training Rounds")]
+    DS3[("D3: Models")]
+    DS4[("D4: Metrics")]
 
-    %% =====================================================================
-    %% SECTION: P2 Expansion - FL Coordination
-    %% =====================================================================
-
-    subgraph P2_EXP["P2: FL Configuration and Coordination (Expanded)"]
-        P2_1(["P2.1\nReceive Global\nModel"])
-        P2_2(["P2.2\nValidate Training\nConfiguration"])
-        P2_3(["P2.3\nSelect Eligible\nEdge Devices"])
-        P2_4(["P2.4\nDistribute\nGlobal Model"])
+    %% P2: FL Coordination (Expanded)
+    subgraph P2_EXP["P2: FL Coordination (Expanded)"]
+        P2_1(["P2.1\nSelect Eligible\nDevices"])
+        P2_2(["P2.2\nDistribute\nGlobal Model"])
     end
 
-    %% =====================================================================
-    %% SECTION: P3 Expansion - Local Training (on Edge Device)
-    %% =====================================================================
-
-    subgraph P3_EXP["P3: Local Model Training (on Edge Device — Expanded)"]
-        P3_1(["P3.1\nPerform Local\nSGD Training\n(E epochs on D_k)"])
-        P3_2(["P3.2\nCalculate\nModel Update\nΔw_k^t = w_local - w^t"])
-        LOCALDATA["🗄️ Local Dataset D_k\n(Stays on Device — Never Transmitted)"]
+    %% P3: Local Training (On Edge Device)
+    subgraph P3_EXP["P3: Local Training  (on Edge Device)"]
+        P3_1(["P3.1\nLocal SGD\nTraining"])
+        LOCALDATA["Local Dataset D_k\n(Stays on Device — Never Transmitted)"]
+        P3_2(["P3.2\nCompute\nModel Update"])
     end
 
-    %% =====================================================================
-    %% SECTION: P4 Expansion - Privacy Protection & Compression
-    %% =====================================================================
-
-    subgraph P4_EXP["P4: Privacy Protection and Model Compression (Expanded — on Edge Device)"]
-        P4_1(["P4.1\nApply Error Feedback\n& Shared-Mask\nSparsification\n(project onto I_t → s_k^t)"])
-        P4_2(["P4.2\nApply Differential\nPrivacy\n(Adaptive Clip C^t\nGaussian Noise σ/M_min)"])
-        P4_3(["P4.3\nStochastic\nQuantization\n(Dithered Rounding\nmod R)"])
-        P4_4(["P4.4\nApply SecAgg\nCryptographic Masking\n(PRG Self-mask +\nPairwise Masks mod Z_R)"])
+    %% P4: Privacy Protection (On Edge Device)
+    subgraph P4_EXP["P4: Privacy Protection & Compression  (on Edge Device)"]
+        P4_1(["P4.1\nDifferential\nPrivacy\n(Clip + Noise)"])
+        P4_2(["P4.2\nSparsify &\nQuantize"])
+        P4_3(["P4.3\nSecAgg\nMasking"])
     end
 
-    %% =====================================================================
-    %% SECTION: P5 Expansion - Secure Aggregation & Global Update
-    %% =====================================================================
-
-    subgraph P5_EXP["P5: Secure Aggregation and Global Model Update (Expanded — Central Server)"]
-        P5_1(["P5.1\nCollect Masked\nUploads y_k^t\n(from S_t^surv)"])
-        P5_2(["P5.2\nPerform\nSecAgg Unmasking\n(Threshold Secret Share\nRecovery for Dropouts)"])
-        P5_3(["P5.3\nAggregate\nGlobal Model\nw^(t+1) = w^t + (1/|S_t^surv|) P^-1(S~^t)"])
-        P5_4(["P5.4\nUpdate\nRDP Privacy\nAccountant\n(ε_t tracking)"])
-        P5_5(["P5.5\nEvaluate Model\nPerformance\n(validation accuracy, loss)"])
-        P5_6(["P5.6\nStore Training\nMetrics"])
-        P5_7(["P5.7\nDistribute Updated\nGlobal Model\nw^(t+1) to all S_t"])
+    %% P5: Secure Aggregation (Central Server)
+    subgraph P5_EXP["P5: Secure Aggregation & Global Update  (Central Server)"]
+        P5_1(["P5.1\nSecAgg\nUnmask"])
+        P5_2(["P5.2\nAggregate\nGlobal Model"])
+        P5_3(["P5.3\nEvaluate &\nStore Metrics"])
     end
 
-    %% =====================================================================
-    %% DATA FLOWS
-    %% =====================================================================
+    %% Data Flows
+    ADMIN -->|"Training config"| P2_1
+    DS3 -->|"Current global model"| P2_2
+    P2_1 -->|"Selected cohort"| P2_2
+    DS2 -->|"Round record"| P2_1
+    P2_2 -->|"Broadcast (model, params)"| ED
 
-    %% Admin → P2
-    ADMIN -->|"Training config\n(M, K, ε, δ, σ, T_round, E)"| P2_2
+    ED -->|"Receives global model"| P3_1
+    LOCALDATA -->|"Private training data"| P3_1
+    P3_1 -->|"Trained weights"| P3_2
+    P3_2 -->|"Raw update"| P4_1
 
-    %% P2 internal flows
-    DS4 -->|"Stored global model w^t"| P2_1
-    P2_1 -->|"Global model w^t"| P2_2
-    P2_2 -->|"Validated config\n(C^t, I_t, M_min)"| P2_3
-    DS2 -->|"Registered device list\nwith status"| P2_3
-    DS6 -->|"Device telemetry r_k^t\n(CPU, RAM, battery, BW)"| P2_3
-    P2_3 -->|"Selected cohort S_t\nwith w^t, C^t, I_t"| P2_4
-    DS3 -->|"Round record"| P2_4
-    P2_4 -->|"Broadcast (w^t, C^t, I_t) to S_t"| ED
-    P2_2 -->|"Round config written"| DS3
+    P4_1 -->|"Noisy clipped update"| P4_2
+    P4_2 -->|"Quantized K+1 vector"| P4_3
+    P4_3 -->|"Masked upload y_k"| P5_1
 
-    %% Edge Device → P3
-    ED -->|"Receives w^t, C^t, I_t"| P3_1
-    LOCALDATA -->|"Private training samples"| P3_1
-    P3_1 -->|"Locally trained weights w_local"| P3_2
-    P3_2 -->|"Raw update Δw_k^t"| P4_1
-
-    %% P4 internal flows (on edge device)
-    P2_3 -->|"C^t, I_t, σ_model, M_min"| P4_2
-    P4_1 -->|"Sparsified update s_k^t (K-dim)\nError residual e_k^(t+1)"| P4_2
-    P4_2 -->|"DP-noisy clipped update s~_k^t\nIndicator bit b~_k^t"| P4_3
-    P4_3 -->|"Quantized fixed-point\nvector v^_k^t ∈ Z_R^(K+1)"| P4_4
-    P4_4 -->|"Masked upload y_k^t"| P5_1
-    P4_2 -->|"Update metadata\n(norm, indicator)"| DS5
-
-    %% P5 internal flows (on central server)
-    P5_1 -->|"Collected masked vectors\n{y_k^t | k ∈ S_t^surv}"| P5_2
-    P5_2 -->|"Noisy cohort sum\nS~^t ∈ R^K, B~^t ∈ R"| P5_3
-    P5_3 -->|"Updated global model w^(t+1)"| DS4
-    P5_3 -->|"Updated clipping threshold C^(t+1)"| DS3
-    P5_3 -->|"Global model"| P5_4
-    P5_3 -->|"Global model w^(t+1)"| P5_5
-    P5_4 -->|"Cumulative ε_t, δ"| DS7
-    P5_5 -->|"Accuracy, loss metrics"| P5_6
-    P5_6 -->|"Written training metrics"| DS7
-    P5_5 -->|"Evaluation complete"| P5_7
-    P5_7 -->|"Broadcast w^(t+1) to participants"| ED
+    P5_1 -->|"Noisy cohort sum"| P5_2
+    P5_2 -->|"Updated global model"| DS3
+    P5_2 -->|"Updated model"| ED
+    P5_2 -->|"Model"| P5_3
+    P5_3 -->|"Accuracy / epsilon / latency"| DS4
+    P5_3 -->|"Round status"| DS2
 
     %% Styling
     classDef external fill:#37474f,stroke:#546e7a,color:#fff,font-weight:bold
@@ -127,9 +79,6 @@ flowchart TB
     classDef dataset fill:#b71c1c,stroke:#c62828,color:#fff,font-style:italic
 
     class ADMIN,ED external
-    class P2_1,P2_2,P2_3,P2_4 process
-    class P3_1,P3_2 process
-    class P4_1,P4_2,P4_3,P4_4 process
-    class P5_1,P5_2,P5_3,P5_4,P5_5,P5_6,P5_7 process
-    class DS2,DS3,DS4,DS5,DS6,DS7 datastore
+    class P2_1,P2_2,P3_1,P3_2,P4_1,P4_2,P4_3,P5_1,P5_2,P5_3 process
+    class DS2,DS3,DS4 datastore
     class LOCALDATA dataset

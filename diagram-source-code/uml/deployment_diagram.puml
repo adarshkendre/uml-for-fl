@@ -13,133 +13,69 @@ skinparam node {
     BorderColor #4527A0
     FontSize 11
 }
-skinparam artifact {
-    BackgroundColor #E8F5E9
-    BorderColor #1B5E20
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
 }
 skinparam component {
     BackgroundColor #E3F2FD
     BorderColor #1565C0
 }
-skinparam database {
-    BackgroundColor #FFF3E0
-    BorderColor #E65100
-}
-skinparam note {
-    BackgroundColor #FFF9C4
-    BorderColor #F57F17
-}
 
 title Deployment Diagram: Physical Infrastructure\nPrivacy-Preserving Federated Learning System
 
-node "Admin Computer" as ADMINPC <<device>> #ECEFF1 {
-    node "Web Browser" as BROWSER <<execution environment>> {
-        artifact "Web Dashboard UI (HTML/CSS/JS)" as DASHUI
+' Admin Computer
+node "Admin Computer" <<device>> #ECEFF1 {
+    node "Web Browser" <<execution environment>> {
+        component "Web Dashboard" as DASHUI
     }
 }
 
-node "Central FL Server" as FLSERVER <<server>> #E8EAF6 {
-    node "Application Runtime (Python / PyTorch / Flower)" as APPRUNTIME <<execution environment>> {
-        component "Backend API Server (REST + WebSocket)" as API_COMP
-        component "Authentication Service" as AUTH_COMP
-        component "FL Coordinator" as COORD_COMP
-        component "Global Aggregation Engine" as GAGG_COMP
-        component "SecAgg Unmasking Module" as SA_COMP
-        component "RDP Privacy Accountant" as RDP_COMP
-        component "Monitoring Service" as MON_COMP
-        artifact "Global Model Artifact (PyTorch state_dict)" as GLOBAL_MODEL
-        artifact "Shared Coordinate Mask I_t" as COORD_MASK
+' Central FL Server
+node "Central FL Server" <<server>> #E8EAF6 {
+    node "Application Runtime" <<execution environment>> {
+        component "Backend API" as API
+        component "FL Coordinator" as COORD
+        component "Global Aggregator" as GAGG
+        component "Secure Aggregator" as SA
     }
 }
 
-node "Database Server" as DBSERVER <<server>> #FFF3E0 {
-    node "Database Runtime" as DBRUNTIME <<execution environment>> {
-        database "Central Database (PostgreSQL)" as DB {
-            artifact "Users Table" as TBL_USERS
-            artifact "EdgeDevices Table" as TBL_DEVICES
-            artifact "TrainingRounds Table" as TBL_ROUNDS
-            artifact "Models Table" as TBL_MODELS
-            artifact "DeviceMetrics Table" as TBL_DEVMET
-            artifact "TrainingMetrics Table" as TBL_TRAINMET
-            artifact "AuditLogs Table" as TBL_AUDIT
-        }
-    }
+' Database Server
+node "Database Server" <<server>> #FFF3E0 {
+    database "Central Database" as DB
 }
 
-node "Physical Edge Device 1 (Raspberry Pi 4)" as ED1 <<device>> #E8F5E9 {
-    node "Linux OS (Raspbian / Ubuntu)" as ED1_OS <<execution environment>> {
-        component "FL Client 1" as FLC1
-        component "Local Trainer 1 (PyTorch SGD)" as LT1
-        component "DP Module 1 (Clipping + Noise)" as DP1
-        component "Model Compressor 1 (Sparsify + Quantize)" as MC1
-        component "SecAgg Masking 1 (PRG Masks mod Z_R)" as SA1
-        component "Telemetry Probe 1 (psutil)" as TEL1
-        database "Local Dataset D_1 (STAYS ON DEVICE)" as DS1 #FFCDD2
-    }
+' Edge Device 1
+node "Edge Device 1\n(Raspberry Pi 4)" <<device>> #E8F5E9 {
+    component "FL Client" as FLC1
+    component "Local Trainer + DP + Compressor" as LT1
+    database "Local Dataset D_1\n(STAYS ON DEVICE)" as DS1 #FFCDD2
 }
 
-node "Physical Edge Device 2 (NVIDIA Jetson Nano)" as ED2 <<device>> #E8F5E9 {
-    node "Linux OS (JetPack)" as ED2_OS <<execution environment>> {
-        component "FL Client 2" as FLC2
-        component "Local Trainer 2 (PyTorch CUDA)" as LT2
-        component "DP Module 2" as DP2
-        component "Model Compressor 2" as MC2
-        component "SecAgg Masking 2" as SA2
-        component "Telemetry Probe 2" as TEL2
-        database "Local Dataset D_2 (STAYS ON DEVICE)" as DS2 #FFCDD2
-    }
+' Edge Device 2
+node "Edge Device 2\n(Jetson Nano)" <<device>> #E8F5E9 {
+    component "FL Client" as FLC2
+    component "Local Trainer + DP + Compressor" as LT2
+    database "Local Dataset D_2\n(STAYS ON DEVICE)" as DS2 #FFCDD2
 }
 
-node "Physical Edge Device 3 (SBC / Container)" as ED3 <<device>> #E8F5E9 {
-    node "Linux OS Runtime" as ED3_OS <<execution environment>> {
-        component "FL Client 3" as FLC3
-        component "Local Trainer 3" as LT3
-        component "DP Module 3" as DP3
-        component "Model Compressor 3" as MC3
-        component "SecAgg Masking 3" as SA3
-        component "Telemetry Probe 3" as TEL3
-        database "Local Dataset D_3 (STAYS ON DEVICE)" as DS3 #FFCDD2
-    }
-}
-
-node "Additional Edge Devices (N-3 more)" as EDMORE <<device>> #E8F5E9 {
-    note as EDMORENOTE
-        Each device runs:
-        FL Client, Local Trainer,
-        DP Module, Model Compressor,
-        SecAgg Masking, Telemetry Probe,
-        Local Dataset (stays local)
-    end note
+' Additional devices note
+node "Edge Device N\n(additional devices)" <<device>> #E8F5E9 {
+    component "FL Client + Local Stack" as FLCN
+    database "Local Dataset D_N\n(STAYS ON DEVICE)" as DSN #FFCDD2
 }
 
 ' Communication Paths
-ADMINPC -- FLSERVER : HTTPS (TLS) REST + WebSocket
-FLSERVER -- DBSERVER : TCP/IP Database Protocol
-FLSERVER -- ED1 : Network (WiFi/LAN/Ethernet) HTTPS encrypted
-FLSERVER -- ED2 : Network (WiFi/LAN/Ethernet) HTTPS encrypted
-FLSERVER -- ED3 : Network (WiFi/LAN/Ethernet) HTTPS encrypted
-FLSERVER -- EDMORE : Network HTTPS encrypted
-
-note bottom of FLSERVER
-    Server transmits to devices:
-    Global model w_t (d*32 bits)
-    Clipping threshold C_t
-    Shared coordinate mask I_t
-    Round parameters (E, M_min)
-
-    Server receives from devices:
-    Masked update y_k (K+1 dimensions)
-    Resource telemetry r_k_t
-
-    NEVER received by server:
-    Raw local dataset D_k
-    Unmasked model update
-end note
+"Admin Computer" -- "Central FL Server" : HTTPS
+"Central FL Server" -- "Database Server" : TCP/IP
+"Central FL Server" -- "Edge Device 1\n(Raspberry Pi 4)" : HTTPS (encrypted)
+"Central FL Server" -- "Edge Device 2\n(Jetson Nano)" : HTTPS (encrypted)
+"Central FL Server" -- "Edge Device N\n(additional devices)" : HTTPS (encrypted)
 
 note bottom of DS1
-    Raw data D_k
-    NEVER leaves
-    this device.
+    Raw data NEVER
+    leaves this device.
 end note
 
 @enduml

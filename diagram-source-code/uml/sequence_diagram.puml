@@ -10,274 +10,102 @@
 !theme cerulean-outline
 skinparam sequenceArrowThickness 2
 skinparam roundcorner 8
-skinparam maxmessagesize 200
 skinparam sequence {
     ActorBorderColor #1B5E20
     ActorBackgroundColor #E8F5E9
-    LifeLineBorderColor #1565C0
-    LifeLineBackgroundColor #E3F2FD
     ParticipantBorderColor #4527A0
     ParticipantBackgroundColor #EDE7F6
-    ParticipantFontColor #1A237E
-    BoxBorderColor #546E7A
-    BoxBackgroundColor #ECEFF1
     NoteBackgroundColor #FFF9C4
     NoteBorderColor #F57F17
 }
 
-title Sequence Diagram: One Complete Federated Learning Training Round
+title Sequence Diagram: One Federated Learning Training Round
 
-' -----------------------------------------------------------------------
-' PARTICIPANTS
-' -----------------------------------------------------------------------
+' Participants
 actor "Admin" as ADMIN
 participant "Dashboard" as DASH
-participant "Backend API" as API
 participant "FL Coordinator" as COORD
-participant "Edge Device 1" as ED1
-participant "Edge Device 2" as ED2
-participant "Edge Device 3" as ED3
-participant "Local Trainer" as LT
-participant "Differential\nPrivacy Module" as DP
-participant "Model Compressor" as MC
+participant "Edge Device" as ED
+participant "Privacy &\nCompression" as PRIV
 participant "Secure\nAggregator" as SA
 participant "Global\nAggregator" as GA
 database "Database" as DB
 
 ' -----------------------------------------------------------------------
-' PHASE 1: ADMIN AUTHENTICATION
+' PHASE 1: ADMIN CONFIGURES AND STARTS ROUND
 ' -----------------------------------------------------------------------
-== Phase 1: Admin Authentication ==
+== Phase 1: Configure and Start Round ==
 
-ADMIN -> DASH : login(username, password)
-activate DASH
-DASH -> API : POST /auth/login {username, password}
-activate API
-API -> API : validateCredentials(username, password)
-API -> DB : SELECT user WHERE username=?
-activate DB
-DB --> API : user record
-deactivate DB
-alt credentials valid
-    API -> DB : INSERT auth_session(user_id, token, expires_at)
-    activate DB
-    DB --> API : session_id
-    deactivate DB
-    API --> DASH : 200 OK - token: JWT, role: admin
-    DASH --> ADMIN : Dashboard loaded - Authentication successful
-else credentials invalid
-    API --> DASH : 401 Unauthorized
-    DASH --> ADMIN : Login failed - invalid credentials
+ADMIN -> DASH : login and configure training
+DASH -> COORD : forward training config
+COORD -> DB : save round (status: initializing)
+COORD --> DASH : round configured
+
+ADMIN -> DASH : start training round
+DASH -> COORD : startRound()
+COORD -> DB : query eligible devices
+COORD -> COORD : select device cohort
+COORD --> DASH : round started
+
+' -----------------------------------------------------------------------
+' PHASE 2: DISTRIBUTE GLOBAL MODEL
+' -----------------------------------------------------------------------
+== Phase 2: Distribute Global Model ==
+
+COORD -> DB : fetch latest global model
+par Broadcast to selected devices
+    COORD ->> ED : broadcast(globalModel, clippingThreshold, coordinateMask)
 end
-deactivate API
+ED --> COORD : acknowledged
 
 ' -----------------------------------------------------------------------
-' PHASE 2: TRAINING CONFIGURATION
+' PHASE 3: LOCAL TRAINING (ON EDGE DEVICES)
 ' -----------------------------------------------------------------------
-== Phase 2: Training Configuration ==
+== Phase 3: Local Training on Edge Devices ==
 
-ADMIN -> DASH : configureTraining(M=10, K, epsilon=8.0, delta=1e-5, sigma, T_round, E=5)
-DASH -> API : POST /fl/configure {training_config, token}
-activate API
-API -> COORD : forwardConfig(config)
-activate COORD
-COORD -> COORD : validateConfig(config)
-COORD -> DB : INSERT training_round(config, status=initializing)
-activate DB
-DB --> COORD : round_id=1
-deactivate DB
-COORD --> API : round_id=1, status=configured
-API --> DASH : 200 OK - round_id: 1, status: configured
-DASH --> ADMIN : Training configured - Round ID: 1
-deactivate API
+note over ED : Local dataset NEVER leaves the device.
 
-' -----------------------------------------------------------------------
-' PHASE 3: ROUND INITIALIZATION AND DEVICE SELECTION
-' -----------------------------------------------------------------------
-== Phase 3: Round Initialization and Device Selection ==
-
-ADMIN -> DASH : startTrainingRound(round_id=1)
-DASH -> API : POST /fl/rounds/1/start {token}
-activate API
-API -> COORD : startRound(round_id=1)
-COORD -> COORD : initializeRound() and generateSharedCoordinateMask(K, d)
-COORD -> DB : SELECT device_metrics WHERE last_seen > threshold
-activate DB
-DB --> COORD : candidate devices list
-deactivate DB
-COORD -> COORD : selectEligibleDevices() - Filter by MEM_free, battery, estimated_latency
-
-note over COORD : Cohort S_t selected from N candidates.\nED1, ED2, ED3 admitted. D_max dropout tolerance set.
-
-COORD -> DB : UPDATE training_round SET status=in_progress, selected_devices=[1,2,3]
-activate DB
-DB --> COORD : ok
-deactivate DB
-COORD --> API : cohort selected, round started
-API --> DASH : 200 OK - status: in_progress, cohort: [1,2,3]
-deactivate API
-
-' -----------------------------------------------------------------------
-' PHASE 4: GLOBAL MODEL DISTRIBUTION
-' -----------------------------------------------------------------------
-== Phase 4: Global Model Distribution ==
-
-COORD -> DB : SELECT model WHERE is_latest=true
-activate DB
-DB --> COORD : global model w_t
-deactivate DB
-
-par Parallel Broadcast to all cohort members
-    COORD ->> ED1 : broadcast(w_t, C_t, I_t, round_params)
-    activate ED1
-    COORD ->> ED2 : broadcast(w_t, C_t, I_t, round_params)
-    activate ED2
-    COORD ->> ED3 : broadcast(w_t, C_t, I_t, round_params)
-    activate ED3
-end
-
-ED1 --> COORD : acknowledged
-ED2 --> COORD : acknowledged
-ED3 --> COORD : acknowledged
-
-' -----------------------------------------------------------------------
-' PHASE 5: LOCAL TRAINING ON EDGE DEVICES
-' -----------------------------------------------------------------------
-== Phase 5: Local Training on Edge Devices (Parallel) ==
-
-par Parallel local training on all selected devices
-    group Edge Device 1 Local Training
-        ED1 -> LT : trainLocalModel(w_t, D_1, E=5)
-        activate LT
-        note over LT : D_1 stays on device. SGD with error feedback.
-        LT -> LT : runSGDEpochs(model, local_dataset_D1, E)
-        LT -> LT : calculateModelUpdate() - delta_w_1 = w_local - w_t
-        LT -> LT : applyErrorFeedback(delta_w_1, e_1_t, gamma_e)
-        LT --> ED1 : raw update u_1_t
-        deactivate LT
-    end
-
-    group Edge Device 2 Local Training
-        ED2 -> LT : trainLocalModel(w_t, D_2, E=5)
-        LT --> ED2 : raw update u_2_t
-    end
-
-    group Edge Device 3 Local Training
-        ED3 -> LT : trainLocalModel(w_t, D_3, E=5)
-        LT --> ED3 : raw update u_3_t
-    end
+loop Each selected device trains locally
+    ED -> ED : run local SGD on private dataset
+    ED -> ED : compute model update
 end
 
 ' -----------------------------------------------------------------------
-' PHASE 6: PRIVACY PROTECTION AND MODEL COMPRESSION
+' PHASE 4: PRIVACY PROTECTION AND COMPRESSION
 ' -----------------------------------------------------------------------
-== Phase 6: Privacy Protection and Model Compression (Per Device) ==
+== Phase 4: Privacy Protection and Compression ==
 
-loop for each device k in cohort [ED1, ED2, ED3]
+ED -> PRIV : apply sparsification + DP (clip + noise)
+PRIV -> PRIV : sparsify, clip, inject Gaussian noise
+PRIV -> PRIV : quantize and apply SecAgg mask
+PRIV --> ED : masked update y_k
 
-    ED1 -> MC : applySharedMaskSparsification(u_k_t, I_t)
-    activate MC
-    note over MC : Project onto K shared coordinates\ns_k_t = P_It(u_k_t) in R^K\nUpdate error buffer e_k_(t+1)
-    MC --> ED1 : s_k_t - K-dim sparsified update
-    deactivate MC
-
-    ED1 -> DP : applyDifferentialPrivacy(s_k_t, C_t, sigma_model, M_min)
-    activate DP
-    note over DP : 1. Clip: s_bar_k = s_k * min(1, C_t/norm(s_k))\n2. Indicator: b_k = I[norm(s_k) <= C_t] - 0.5\n3. Noise: s_tilde_k = s_bar_k + N(0, sigma^2*C^2/M_min * I_K)\n4. b_tilde_k = b_k + N(0, sigma_b^2/M_min)
-    DP --> ED1 : noisy update (s_tilde_k, b_tilde_k)
-    deactivate DP
-
-    ED1 -> MC : stochasticQuantize([s_tilde_k; b_tilde_k], f, R)
-    activate MC
-    note over MC : xi_k ~ U(0,1)^(K+1)\nv_hat_k = floor(v_k * 2^f + xi_k) mod R
-    MC --> ED1 : quantized vector v_hat_k in Z_R^(K+1)
-    deactivate MC
-
-end
+ED ->> COORD : upload masked update y_k
 
 ' -----------------------------------------------------------------------
-' PHASE 7: SECAGG MASKING AND UPLOAD
+' PHASE 5: SECURE AGGREGATION AND GLOBAL UPDATE
 ' -----------------------------------------------------------------------
-== Phase 7: SecAgg Masking and Masked Upload ==
+== Phase 5: Secure Aggregation and Global Update ==
 
-loop for each device k in cohort
-    ED1 -> SA : applyMask(v_hat_k, deviceId_k, cohortIds)
-    activate SA
-    note over SA : y_k = (v_hat_k + PRG(r_k)\n+ sum_{j>k} PRG(s_kj)\n- sum_{j<k} PRG(s_jk)) mod R
-    SA --> ED1 : masked upload y_k - K+1 dimensions
-    deactivate SA
-end
+COORD -> SA : unmask cohort sum
+SA -> SA : recover dropped masks (if any dropout)
+SA --> COORD : noisy cohort sum
 
-ED1 ->> COORD : uploadMaskedUpdate(y_1, round_id=1)
-ED2 ->> COORD : uploadMaskedUpdate(y_2, round_id=1)
-ED3 ->> COORD : uploadMaskedUpdate(y_3, round_id=1)
-deactivate ED1
-deactivate ED2
-deactivate ED3
+COORD -> GA : aggregateUpdates(cohortSum, mask, survivorCount)
+GA -> GA : compute updated global model
+GA -> GA : update privacy accountant (epsilon tracking)
+GA --> COORD : updated global model + metrics
 
 ' -----------------------------------------------------------------------
-' PHASE 8: SECURE AGGREGATION UNMASKING
+' PHASE 6: STORE AND DISTRIBUTE
 ' -----------------------------------------------------------------------
-== Phase 8: Secure Aggregation Unmasking ==
+== Phase 6: Store Metrics and Distribute Model ==
 
-COORD -> SA : unmaskCohortSum({y_1, y_2, y_3}, survivorIds)
-activate SA
-note over SA : Server sees only the cohort SUM.\nIndividual updates remain private.\nSecret shares used for dropout recovery.
-SA -> SA : recoverDroppedMasks(secretShares) if dropout occurred
-SA -> SA : computeModularSum(maskedVectors)
-SA --> COORD : noisy cohort sum (S_tilde, B_tilde)
-deactivate SA
+COORD -> DB : save updated model + training metrics
+COORD -> DB : mark round completed
+COORD ->> ED : distribute updated global model
 
-' -----------------------------------------------------------------------
-' PHASE 9: GLOBAL MODEL AGGREGATION AND EVALUATION
-' -----------------------------------------------------------------------
-== Phase 9: Global Aggregation and Evaluation ==
-
-COORD -> GA : aggregateUpdates(S_tilde, coordinateMask, survivorCount, w_t)
-activate GA
-GA -> GA : w_(t+1) = w_t + (1/|S_surv|) * P_inv_It(S_tilde)
-GA -> GA : compute gamma_t and update C_(t+1)
-GA -> GA : updateRDPAccountant(epsilon_t, delta)
-GA -> GA : evaluateModel(w_(t+1), validation_dataset)
-GA --> COORD : updated model w_(t+1), accuracy, loss, epsilon_t, C_(t+1)
-deactivate GA
-
-' -----------------------------------------------------------------------
-' PHASE 10: STORE METRICS AND DISTRIBUTE UPDATED MODEL
-' -----------------------------------------------------------------------
-== Phase 10: Store Metrics ==
-
-COORD -> DB : INSERT model(w_(t+1), accuracy, loss, round_id=1)
-activate DB
-DB --> COORD : model_id
-deactivate DB
-
-COORD -> DB : INSERT training_metrics(round_id, accuracy, loss, epsilon_t, delta, latency)
-activate DB
-DB --> COORD : metric_id
-deactivate DB
-
-COORD -> DB : UPDATE training_round SET status=completed, completed_at=NOW()
-activate DB
-DB --> COORD : ok
-deactivate DB
-
-== Phase 11: Distribute Updated Global Model ==
-
-opt next round required - stopping criteria not met
-    par Distribute updated model to participants
-        COORD ->> ED1 : distributeGlobalModel(w_(t+1))
-        COORD ->> ED2 : distributeGlobalModel(w_(t+1))
-        COORD ->> ED3 : distributeGlobalModel(w_(t+1))
-    end
-end
-
-== Phase 12: Dashboard Update ==
-
-COORD ->> DASH : asyncMetadataUpdate(round_id=1, accuracy=87.3, epsilon_t=3.2, latency=45s)
-DASH --> ADMIN : Training Progress: Round 1 complete.\nAccuracy: 87.3%  Privacy budget used: epsilon_t=3.2
-
-deactivate COORD
-deactivate DASH
+COORD ->> DASH : async dashboard update (accuracy, epsilon, latency)
+DASH --> ADMIN : Round complete — training progress displayed
 
 @enduml

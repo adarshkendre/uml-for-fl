@@ -23,184 +23,84 @@ skinparam swimlane {
     TitleFontColor #FFFFFF
     TitleBackgroundColor #37474F
 }
-skinparam note {
-    BackgroundColor #FFF9C4
-    BorderColor #F57F17
-}
 
-title Activity Diagram: Complete Federated Learning Workflow
+title Activity Diagram: Federated Learning Workflow
 
-|#E8EAF6|Admin / System Operator|
-|#E8F5E9|Central FL Server|
-|#F3E5F5|Edge Devices|
-|#FFF3E0|Privacy and Security Layer|
-|#E0F7FA|Database|
+|Admin|
+|Central FL Server|
+|Edge Devices|
 
-|Admin / System Operator|
+|Admin|
 start
-
-:Admin opens Web Dashboard;
-:Admin enters login credentials;
+:Login and configure FL training parameters;
 
 |Central FL Server|
-:Validate admin credentials;
+:Authenticate admin;
 
-if (Credentials valid?) then (Yes)
-    :Issue JWT authentication token;
+if (Valid credentials?) then (Yes)
+    :Initialize global model;
 else (No)
-    :Return 401 Unauthorized;
-    :Log failed authentication attempt;
+    :Reject login;
     stop
 endif
-
-|Admin / System Operator|
-:Configure FL training parameters
-(M, K, epsilon, delta, sigma, T_round, E, D_max);
-
-|Central FL Server|
-:Initialize global model w_0;
-:Store global model in database;
-
-|Edge Devices|
-:Physical edge devices send registration request;
-
-|Central FL Server|
-:Authenticate and register devices;
-:Store device records in Device Registry;
 
 repeat
 
     |Central FL Server|
-    :Initialize new training round t;
-    :Generate shared coordinate mask I_t (K coordinates);
-    :Update adaptive clipping threshold C_t;
+    :Start new training round;
+    :Query device telemetry;
+    :Select eligible device cohort;
 
-    :Query device registry and latest telemetry;
-    :Compute estimated round latency per device;
-
-    :Filter eligible devices:
-    MEM_free > MEM_min
-    Battery > E_min
-    tau_estimated <= T_round;
-
-    if (Enough eligible devices available?) then (Yes)
-        :Sample cohort S_t of size M;
+    if (Enough devices available?) then (Yes)
+        :Broadcast global model to cohort;
     else (No)
-        :Log warning - insufficient device pool;
         :Abort round;
         stop
     endif
 
-    |Database|
-    :Store round record - status: in_progress;
-
-    |Central FL Server|
-    :Distribute global model w_t to cohort S_t;
-    :Broadcast (w_t, C_t, I_t, round_params);
-
     |Edge Devices|
 
     fork
-        :Edge Device 1: receive (w_t, C_t, I_t);
-        :Perform local SGD training E epochs on D_1;
+        :Device 1: receive model, train locally on D_1;
         note right
-            D_1 stays on device.
-            NEVER transmitted.
+            Local dataset stays
+            on device — never
+            transmitted.
         end note
-        :Calculate update: delta_w_1 = w_local - w_t;
     fork again
-        :Edge Device 2: receive (w_t, C_t, I_t);
-        :Perform local SGD training E epochs on D_2;
-        :Calculate update: delta_w_2 = w_local - w_t;
+        :Device 2: receive model, train locally on D_2;
     fork again
-        :Edge Device N: receive (w_t, C_t, I_t);
-        :Perform local SGD training E epochs on D_N;
-        :Calculate update: delta_w_N = w_local - w_t;
+        :Device N: receive model, train locally on D_N;
     end fork
 
-    |Privacy and Security Layer|
-
-    :Apply error feedback accumulation
-    u_k = delta_w_k + gamma_e * e_k;
-
-    :Apply shared-mask sparsification
-    s_k = P_It(u_k) in R^K;
-
-    :Update error residual buffer e_k_(t+1);
-
-    :Apply adaptive L2 norm clipping (C_t)
-    s_bar_k = s_k * min(1, C_t / norm(s_k));
-
-    :Compute norm-indicator bit
-    b_k = I[norm(s_k) <= C_t] - 0.5;
-
-    :Inject calibrated Gaussian noise
-    variance = sigma^2 * C^2 / M_min per coordinate;
-
-    :Perturb indicator bit with Gaussian noise;
-
-    :Concatenate: v_k = [s_tilde_k ; b_tilde_k] in R^(K+1);
-
-    :Apply unbiased stochastic quantization
-    v_hat_k = floor(v_k * 2^f + xi_k) mod R;
-
-    :Apply SecAgg cryptographic masks
-    y_k = (v_hat_k + PRG(r_k) + pairwise masks) mod R;
-
-    |Edge Devices|
-    :Transmit masked update y_k (K+1 dims) to coordinator;
+    :Apply Differential Privacy (clip + noise);
+    :Apply sparsification and quantization;
+    :Apply SecAgg masking;
+    :Upload masked update to coordinator;
 
     |Central FL Server|
 
-    if (All cohort members uploaded within T_round?) then (Yes)
-        :Proceed with standard SecAgg unmasking;
-    else (No - some devices dropped)
-        if (Survivors >= M_min?) then (Yes)
-            :Recover dropped masks via secret share reconstruction;
-        else (No)
-            :Abort round - privacy guarantee violated;
-            :Log abort event;
-        endif
+    if (Enough survivors within deadline?) then (Yes)
+        :Unmask cohort sum (SecAgg);
+    else (No)
+        :Abort round — privacy guarantee violated;
+        stop
     endif
 
-    :Unmask cohort sum - server sees only aggregate S_tilde;
+    :Aggregate global model;
+    :Update privacy accountant (track cumulative epsilon);
+    :Evaluate model performance;
+    :Store updated model and metrics;
+    :Distribute updated global model to devices;
 
-    :Aggregate global model
-    w_(t+1) = w_t + (1/survivors) * P_inv_It(S_tilde);
+    |Admin|
+    :View round results on Dashboard;
 
-    :Update clipping threshold C_(t+1);
+repeat while (Stopping criteria met?) is (No)
+-> Yes;
 
-    :Update Renyi DP accountant - track cumulative epsilon_t;
-
-    :Evaluate global model on validation data;
-
-    |Database|
-    :Store updated global model w_(t+1);
-    :Store training metrics;
-    :Store round record as completed;
-
-    |Admin / System Operator|
-    :Dashboard displays real-time progress;
-
-    |Central FL Server|
-    :Distribute updated global model w_(t+1) to cohort;
-
-    if (Stopping criteria met?) then (Yes)
-    else (No)
-    end if
-
-repeat while (Continue training?) is (Yes)
--> No;
-
-|Admin / System Operator|
-:Display final training results;
-:Generate and export training report;
-
-|Database|
-:Finalize training record;
-:Archive metrics and model artifacts;
-
-|Admin / System Operator|
+|Admin|
+:View final training results;
 stop
 
 @enduml

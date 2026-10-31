@@ -1,396 +1,433 @@
 # Explanation of All 15 Diagrams
 
-This document explains each diagram in the project package and links the design to the federated learning architecture described in the project.
+This document explains each of the 15 diagrams for the project:
+**Privacy-Preserving and Resource-Aware Federated Learning for Heterogeneous Edge Devices.**
+
+---
 
 ## 1. System Architecture Diagram
-### Diagram type
-Mermaid architecture diagram
 
-### Purpose
-To show the overall structure of the system, including central server responsibilities and edge-device operations.
+**Diagram type:** Mermaid graph (top-to-bottom)
 
-### Scope
-The diagram spans presentation, API, federated learning coordination, edge processing, privacy and security, storage, and monitoring layers.
+**Purpose:**
+To show the overall structure of the system across five major layers.
 
-### Components explained
-- Admin and System Operator interact with the dashboard.
-- The Web Dashboard connects to the Backend API.
-- The Authentication Service validates credentials and issues tokens.
-- The Federated Learning Coordinator manages training rounds, eligible cohorts, and distribution of the global model.
-- Edge devices maintain private local datasets and perform local training.
-- Local training occurs inside a physical edge device, not in a central server.
-- Privacy Protection, Differential Privacy, and Model Compression are applied before updates are sent.
-- Secure Aggregation combines protected client updates and keeps individual contributions private.
-- The Database stores metadata, model states, metrics, and logs.
-- Monitoring gathers device telemetry and training metrics for dashboards.
+**Main elements:**
+- Presentation Layer: Admin and Web Dashboard
+- API Layer: Backend API and Authentication Service
+- FL Coordination Layer: FL Coordinator, Secure Aggregator, Global Aggregator
+- Edge Device Layer: FL Client, Local Trainer, Privacy & Compression, Local Dataset
+- Data Storage Layer: Central Database
 
-### Data movement and relationships
-The dashboard sends configuration and monitoring requests to the API. The API validates authentication and triggers coordinator actions. The coordinator broadcasts the global model to edge devices. Devices train locally and send protected updates. The server aggregates those updates and distributes the new model.
+**Important relationships:**
+- Admin uses the Dashboard to configure training.
+- The FL Coordinator distributes the global model to edge devices.
+- Edge devices train locally, apply privacy and compression, and send masked updates back.
+- The Secure Aggregator unmasks the cohort sum, and the Global Aggregator produces the next model.
+- The Database stores models, metrics, and round records.
 
-### Relevance
-This diagram gives the project’s high-level view and is the first conceptual map for understanding the project.
+**Workflow:**
+Admin logs in → configures and starts a round → Coordinator selects devices → devices train locally → privacy and compression are applied → masked updates are uploaded → server aggregates → updated model is stored and redistributed.
 
-### Assumptions
-The project assumes a central coordinator, physical hardware devices, and privacy-preserving update transmission.
+**Relevance:**
+This is the primary high-level view of the project. It is the best diagram to begin a viva explanation.
+
+---
 
 ## 2. Entity Relationship Diagram (ERD)
-### Diagram type
-Mermaid ER diagram with Crow’s Foot notation
 
-### Purpose
-To describe the database structure needed for the system.
+**Diagram type:** Mermaid erDiagram (Crow's Foot notation)
 
-### Entities and keys
-- Users: user_id (PK), role, login metadata
-- AuthenticationSessions: session_id (PK), user_id (FK)
-- EdgeDevices: device_id (PK), device_uuid, status, hardware attributes
-- TrainingRounds: round_id (PK), target cohort size, status, timing metadata
-- Models: model_id (PK), round_id (FK), version, validation metrics
-- ModelUpdates: update_id (PK), round_id (FK), device_id (FK)
-- DeviceMetrics: metric_id (PK), device_id (FK), round_id (FK)
-- TrainingMetrics: metric_id (PK), round_id (FK), accuracy and privacy metrics
-- AuditLogs: log_id (PK), user_id/device_id/round_id (FKs)
+**Purpose:**
+To describe the central database structure used by the system.
 
-### Relationships
-- One user may generate many audit logs and sessions.
-- One training round may contain many model updates, metrics, and models.
-- One device may participate in many rounds and produce many metrics.
-- One model may be associated with many updates.
+**Main entities:**
+- **Users** (user_id PK, username, role, is_active)
+- **EdgeDevices** (device_id PK, device_name, device_type, status)
+- **TrainingRounds** (round_id PK, cohort_size, clipping_threshold, noise_multiplier, status)
+- **Models** (model_id PK, round_id FK, version, validation_accuracy, validation_loss)
+- **ModelUpdates** (update_id PK, round_id FK, device_id FK, dp_applied, secagg_masked)
+- **DeviceMetrics** (metric_id PK, device_id FK, round_id FK, cpu_usage, ram_free_mb, battery_joules, admitted)
+- **TrainingMetrics** (metric_id PK, round_id FK, global_accuracy, cumulative_epsilon, participating_devices)
 
-### Relevance
-The ERD explains how the system stores user activity, device health, round status, model versions, and training outcomes.
+**Important relationships:**
+- One User configures many TrainingRounds.
+- One TrainingRound produces many Models, ModelUpdates, DeviceMetrics, and TrainingMetrics.
+- Each EdgeDevice submits ModelUpdates and reports DeviceMetrics per round.
 
-### Assumptions
-The database is normalized around training rounds, device participation, model state, and metrics rather than storing raw local data.
+**Relevance:**
+This diagram explains how all system data — device health, training progress, privacy budget, and model versions — is organized and stored.
 
-## 3. Data Flow Diagram Level 0
-### Diagram type
-Mermaid DFD context diagram
+---
 
-### Purpose
-To show the whole federated learning system as a single process and its interactions with external entities.
+## 3. DFD Level 0 (Context Diagram)
 
-### External entities
-- Admin
-- System Operator
-- Physical Edge Devices
+**Diagram type:** Mermaid flowchart (Yourdon-DeMarco DFD approximation)
 
-### Processes
-- Process 0: Privacy-Preserving Federated Learning System
+**Purpose:**
+To show the complete system as one process and its interactions with external entities.
 
-### Data flows
-- Authentication requests and configuration commands from admin and operator
-- Device registration and authentication from edge devices
-- Resource telemetry from devices to the system
-- Protected model updates sent to the coordinator
-- Global model distribution back to devices
-- Training status, reports, and performance summaries to users
+**Main elements:**
+- External entities: Admin, System Operator, Physical Edge Devices
+- Central process: Privacy-Preserving Federated Learning System (Process 0)
 
-### Important rule
-Raw local datasets remain on edge devices and are never transmitted to the central server.
+**Important data flows:**
+- Admin sends login, training configuration, and device management commands.
+- System Operator sends login and monitoring queries.
+- Edge devices send device registration, resource telemetry, and masked model updates.
+- The system sends auth tokens, status reports, global models, and training instructions.
+- The local dataset on each edge device is explicitly shown as never transmitted.
 
-### Relevance
-This is the top-level view used in system analysis and requirement validation.
+**Relevance:**
+This is the top-level system boundary diagram. It is useful for introducing the project scope to a new audience.
 
-## 4. Data Flow Diagram Level 1
-### Diagram type
-Mermaid DFD decomposition
+---
 
-### Processes
-- P1: User Authentication and Device Registration
-- P2: Federated Learning Configuration and Coordination
+## 4. DFD Level 1
+
+**Diagram type:** Mermaid flowchart (Yourdon-DeMarco DFD approximation)
+
+**Purpose:**
+To decompose the central system process into six major operational processes.
+
+**Processes:**
+- P1: Authentication and Device Registration
+- P2: FL Coordination
 - P3: Local Model Training
-- P4: Privacy Protection and Model Compression
-- P5: Secure Aggregation and Global Model Update
+- P4: Privacy Protection and Compression
+- P5: Secure Aggregation and Global Update
 - P6: Monitoring and Reporting
 
-### Data stores
-- D1 Users and Auth Sessions
-- D2 Edge Device Registry
-- D3 Training Rounds
-- D4 Models
-- D5 Model Updates
-- D6 Device Metrics
-- D7 Training Metrics
-- D8 Audit Logs
+**Data stores:**
+- D1: Users and Devices
+- D2: Training Rounds
+- D3: Models
+- D4: Metrics and Logs
 
-### Why important
-The diagram decomposes the single system process into operational flows that align with real federated learning engineering.
+**Workflow:**
+Admin and devices authenticate through P1. Admin configures P2, which distributes the global model. Edge devices perform local training in P3. P4 applies privacy and compression. P5 aggregates updates and produces the new model. P6 sends monitoring data to users.
 
-### Assumptions
-Only a subset of the metadata is stored centrally; raw data remains private and local.
+**Relevance:**
+This diagram shows how the system's main responsibilities are divided and how data moves between them.
 
-## 5. Data Flow Diagram Level 2
-### Diagram type
-Mermaid detailed DFD
+---
 
-### Purpose
-To decompose the key training workflow into precise sub-processes.
+## 5. DFD Level 2
 
-### Sub-processes explained
-- Receive Global Model
-- Validate Training Configuration
-- Select Eligible Edge Devices
-- Distribute Global Model
-- Perform Local Training
-- Calculate Model Updates
-- Apply Differential Privacy
-- Perform Update Pruning and Sparsification
-- Transmit Protected Updates
-- Perform Secure Aggregation
-- Aggregate Global Model
-- Evaluate Model Performance
-- Store Training Metrics
-- Distribute Updated Global Model
+**Diagram type:** Mermaid flowchart (Yourdon-DeMarco DFD approximation)
 
-### Data flow logic
-The coordinator receives the current model, checks configuration, selects clients, and distributes the model. Devices train locally, compute updates, apply DP and compression, and upload protected updates. The server aggregates the updates and distributes a new global model.
+**Purpose:**
+To expand the key FL training processes (P2–P5) into detailed sub-processes.
 
-### Relevance
-This is the most detailed DFD for the training pipeline and should be used for design and viva explanations.
+**Sub-processes:**
+- P2.1: Select eligible devices | P2.2: Distribute global model
+- P3.1: Local SGD training | P3.2: Compute model update
+- P4.1: Differential Privacy (clip + noise) | P4.2: Sparsify and quantize | P4.3: SecAgg masking
+- P5.1: SecAgg unmask | P5.2: Aggregate global model | P5.3: Evaluate and store metrics
+
+**Key point:**
+The Local Dataset D_k flows only within the edge device sub-process and is never transmitted externally.
+
+**Relevance:**
+This is the most detailed DFD for the training pipeline and is ideal for viva explanations of how DP, compression, and secure aggregation fit together.
+
+---
 
 ## 6. Use Case Diagram
-### Diagram type
-PlantUML use case diagram
 
-### Actors
+**Diagram type:** PlantUML use case diagram (UML 2.5.1)
+
+**Purpose:**
+To describe user roles and the system capabilities available to each actor.
+
+**Actors:**
 - Admin
 - System Operator
-- Registered Edge Device
+- Edge Device
 
-### Use cases explained
-- Login and authentication
-- Manage users
-- Register and authenticate edge devices
-- Configure federated learning training
-- Start a training round
-- Select devices and distribute models
-- Perform local training
-- Apply differential privacy
-- Compress updates
-- Perform secure aggregation
-- Aggregate the global model
-- Monitor training and device health
-- Generate reports
+**Use cases:**
+- Login
+- Register Edge Device
+- Configure FL Training
+- Start Training Round (includes: Select Devices and Distribute Model)
+- Perform Local Training (includes: Apply Differential Privacy)
+- Compress and Upload Update (extends: Aggregate Global Model)
+- Monitor Training Progress
+- View Model Performance
 
-### Relationships
-The diagram uses include, extend, and direct actor associations to show real system behavior. It avoids unnecessary use-case nesting.
+**Relevance:**
+This diagram captures all meaningful interactions between human users, devices, and the system in one view.
 
-### Relevance
-This diagram captures user roles and system capabilities in a standard UML manner.
+---
 
 ## 7. Class Diagram
-### Diagram type
-PlantUML class diagram
 
-### Purpose
+**Diagram type:** PlantUML class diagram (UML 2.5.1)
+
+**Purpose:**
 To represent the static software design of the system.
 
-### Classes explained
-- User, Admin, SystemOperator, AuthenticationService
-- EdgeDevice, FLClient, LocalTrainer, Model
-- DifferentialPrivacy, ModelCompressor, SecureAggregator, GlobalAggregator
-- TrainingRound, ModelUpdate, DeviceMetrics, TrainingMetrics
-- Dashboard, BackendAPI, DatabaseManager
+**Main classes:**
 
-### Relationships and multiplicity
-The diagram demonstrates inheritance, association, composition, aggregation, and dependency. For example, Admin and SystemOperator inherit from User. One TrainingRound contains many ModelUpdates and DeviceMetrics. One FederatedLearningCoordinator manages many EdgeDevices and one training round. ModelUpdate objects are linked to differential privacy and compression processing.
+*Server-side:*
+- **FLCoordinator** — manages rounds, selects devices, distributes and collects models
+- **TrainingRound** — holds round parameters and status
+- **GlobalAggregator** — computes the updated global model and tracks privacy budget
+- **SecureAggregator** — unmasks cohort sum, handles dropouts via secret shares
+- **Dashboard** — displays training progress and model performance
 
-### Why important
-The class diagram shows how the software system is structured before implementation and ensures design clarity.
+*Edge-side:*
+- **EdgeDevice** — registers, sends telemetry, initiates training
+- **FLClient** — receives model, executes round, uploads masked update
+- **LocalTrainer** — runs local SGD on private dataset
+- **DifferentialPrivacy** — clips updates and injects calibrated Gaussian noise
+- **ModelCompressor** — applies sparsification, quantization, and SecAgg masking
 
-### Practical example
-An admin configures a training round, the coordinator selects eligible devices, devices run local training, and the secure aggregator and global aggregator produce the next global model.
+**Important relationships:**
+- FLCoordinator composes TrainingRound, GlobalAggregator, and SecureAggregator.
+- FLClient composes LocalTrainer, DifferentialPrivacy, and ModelCompressor.
+- FLCoordinator aggregates EdgeDevice instances.
+
+**Relevance:**
+This diagram shows how all software components are organized before implementation.
+
+---
 
 ## 8. Sequence Diagram
-### Diagram type
-PlantUML sequence diagram
 
-### Purpose
-To show message flow during one federated learning round.
+**Diagram type:** PlantUML sequence diagram (UML 2.5.1)
 
-### Main interaction flow
-1. Admin logs in.
-2. Dashboard sends auth request.
-3. Backend validates credentials.
-4. Admin configures training parameters.
-5. FL coordinator initializes the round.
-6. Devices are selected and the global model is distributed.
-7. Each device trains locally on private data.
-8. DP is applied to updates.
-9. Compression is applied.
-10. Protected updates are sent to the secure aggregator.
-11. Secure aggregation and global aggregation generate the next global model.
-12. Metrics are stored and displayed to the dashboard.
+**Purpose:**
+To show the ordered message flow during one complete federated learning training round.
 
-### Alternative flow
-The diagram includes an alt block for device unavailability, showing that the system can skip or retry a failed client.
+**Participants:**
+Admin, Dashboard, FL Coordinator, Edge Device, Privacy & Compression, Secure Aggregator, Global Aggregator, Database
 
-### Relevance
-This is the best diagram to explain runtime behavior during a viva or review.
+**Phases:**
+1. Admin configures and starts the training round.
+2. Coordinator selects an eligible device cohort.
+3. Global model is broadcast to selected devices.
+4. Each device trains locally on its private dataset (parallel).
+5. Privacy and compression are applied; masked updates are uploaded.
+6. Secure aggregation unmasks the cohort sum.
+7. Global Aggregator computes the updated model and tracks privacy budget.
+8. Metrics are stored; updated model is distributed; Dashboard is refreshed.
+
+**Relevance:**
+This is the most useful diagram for explaining runtime behavior during a viva or project review.
+
+---
 
 ## 9. Activity Diagram
-### Diagram type
-PlantUML activity diagram
 
-### Purpose
-To describe the complete training workflow from login to final result distribution.
+**Diagram type:** PlantUML activity diagram with swimlanes (UML 2.5.1)
 
-### Workflow overview
-The process starts with admin authentication. Training configuration is validated. The coordinator checks device availability, distributes the global model, and starts parallel local training on selected devices. Local updates are processed with differential privacy and model compression before secure aggregation. The new global model is evaluated, metrics are stored, and either a new round begins or final results are displayed.
+**Purpose:**
+To describe the complete training workflow from login to final model distribution.
 
-### Decision points
-- Are credentials valid?
-- Are devices available and eligible?
-- Is the stopping criterion satisfied?
+**Swimlanes:**
+- Admin
+- Central FL Server
+- Edge Devices
 
-### parallel execution
-The diagram uses a fork to show that multiple edge devices train in parallel.
+**Workflow:**
+Admin logs in and configures training → server authenticates → global model initialized → for each round: server selects devices → global model distributed → devices train in parallel locally → DP, compression, and masking applied → masked updates uploaded → server unmasks and aggregates → model evaluated → metrics stored → model redistributed → repeat until stopping criteria met.
+
+**Decision points:**
+- Credentials valid?
+- Enough devices available?
+- Stopping criteria met?
+
+**Relevance:**
+This diagram gives a complete end-to-end picture of the workflow and is easy to follow during a viva explanation.
+
+---
 
 ## 10. State Machine Diagram
-### Diagram type
-PlantUML state machine diagram
 
-### Purpose
-To show the lifecycle of a physical edge device.
+**Diagram type:** PlantUML state machine diagram (UML 2.5.1)
 
-### States
-Unregistered, Registered, Authenticated, Available, SelectedForTraining, ReceivingGlobalModel, TrainingLocally, ApplyingDifferentialPrivacy, CompressingModelUpdate, UploadingModelUpdate, WaitingForNextRound, Offline, and Failed.
+**Purpose:**
+To show the lifecycle of a physical edge device across registration, training, and failure recovery.
 
-### Events and guards
-Transitions are triggered by authentication, eligibility checks, network issues, and recovery events. Guards such as deviceOffline and recoveryFailed define realistic runtime behavior.
+**States:**
+- Unregistered → Registered → Authenticated → Available
+- Available → TrainingLocally (when selected and resources eligible)
+- TrainingLocally → WaitingForNextRound (after uploading update)
+- WaitingForNextRound → Available (round complete) or re-selected → TrainingLocally
+- Any state → Offline (connection lost)
+- Offline → Authenticated (reconnect) or Registered (token expired) or [*] (shutdown)
+- Failed → Unregistered (recovery) or [*] (permanent failure)
 
-### Relevance
-This diagram explains the behavior of edge devices across multiple training rounds and connectivity disruptions.
+**Key internal actions in TrainingLocally:**
+Run local SGD, apply DP (clip + noise), apply sparsification and masking, upload masked update.
+
+**Relevance:**
+This diagram explains the realistic behavior of edge devices including connectivity issues, round selection, and failure recovery.
+
+---
 
 ## 11. Component Diagram
-### Diagram type
-PlantUML component diagram
 
-### Purpose
-To show software components and their dependencies at the design level.
+**Diagram type:** PlantUML component diagram (UML 2.5.1)
 
-### Central server components
-- Web Dashboard
-- Backend API
-- Authentication Service
-- FL Coordinator
-- Secure Aggregation Component
-- Global Aggregation Component
-- Monitoring Component
-- Database
+**Purpose:**
+To show major software components and their dependencies at the architecture level.
 
-### Edge device components
-- FL Client
-- Local Training Component
-- Privacy Protection Component
-- Differential Privacy Component
-- Model Compression Component
+**Central server components:**
+Web Dashboard → Backend API → Auth Service, FL Coordinator → Secure Aggregator → Global Aggregator, Database
 
-### Why it matters
-This diagram identifies the modular system decomposition and shows how components communicate with each other.
+**Edge device components:**
+FL Client → Local Trainer → Privacy & Compression (DP + Sparsification + Quantization) → SecAgg Masking → FL Client (masked upload)
+
+**Inter-node communication:**
+- FL Coordinator broadcasts global model to FL Client.
+- FL Client uploads masked update to FL Coordinator.
+- FL Client sends resource telemetry to FL Coordinator.
+
+**Relevance:**
+This diagram identifies modular decomposition and shows how server-side and edge-side software communicate.
+
+---
 
 ## 12. Deployment Diagram
-### Diagram type
-PlantUML deployment diagram
 
-### Purpose
-To model the physical infrastructure and deployment layout.
+**Diagram type:** PlantUML deployment diagram (UML 2.5.1)
 
-### Nodes explained
-- Admin Computer
-- Web Browser
-- Network Communication Layer
-- Central FL Server
-- Database Server
-- Physical Edge Device 1, 2, 3, and additional edge devices
+**Purpose:**
+To model the physical infrastructure and deployment of the system.
 
-### Deployed artifacts
-- Dashboard application
-- Federated learning services
-- Database storage
-- Local datasets stored on devices
+**Nodes:**
+- Admin Computer: Web Browser running Web Dashboard
+- Central FL Server: Backend API, FL Coordinator, Global Aggregator, Secure Aggregator
+- Database Server: Central Database
+- Edge Device 1 (Raspberry Pi 4): FL Client, Local Trainer + DP + Compressor, Local Dataset D_1
+- Edge Device 2 (Jetson Nano): FL Client, Local Trainer + DP + Compressor, Local Dataset D_2
+- Edge Device N: FL Client + Local Stack, Local Dataset D_N
 
-### Important rule
-Raw local datasets remain on individual edge devices and are not moved to the central server.
+**Communication paths:**
+Admin Computer ↔ Central FL Server: HTTPS
+Central FL Server ↔ Database Server: TCP/IP
+Central FL Server ↔ Each Edge Device: HTTPS (encrypted)
+
+**Key rule:**
+Raw local datasets remain on individual edge devices and are never transmitted.
+
+**Relevance:**
+This diagram maps the software system to real physical hardware and networking infrastructure.
+
+---
 
 ## 13. Object Diagram
-### Diagram type
-PlantUML object diagram
 
-### Purpose
-To show a runtime snapshot of one training round.
+**Diagram type:** PlantUML object diagram (UML 2.5.1)
 
-### Objects
-- FederatedLearningCoordinator
-- TrainingRound
-- GlobalModel
-- EdgeDevice instances
-- LocalModel instances
-- ModelUpdate instances
-- SecureAggregator
-- GlobalAggregator
+**Purpose:**
+To show a concrete runtime snapshot during Training Round 1.
 
-### Runtime content
-The object diagram includes sample attribute values such as device identifiers, training round status, noise parameters, and update statistics.
+**Objects and key attribute values:**
+- `coordinator1 : FLCoordinator` — cohortSize=3, dropoutMax=1
+- `round1 : TrainingRound` — roundId=1, status="in_progress", clippingThreshold=1.0, noiseMultiplier=1.1
+- `globalModel1 : Model` — version=3, validationAccuracy=0.842
+- `device1 : EdgeDevice` — status="TrainingLocally" (Raspberry Pi 4)
+- `device2 : EdgeDevice` — status="ApplyingPrivacy" (Jetson Nano)
+- `device3 : EdgeDevice` — status="UploadingUpdate" (Generic SBC)
+- `secAgg1 : SecureAggregator` — cohortSize=3, dropoutTolerance=1
+- `globalAgg1 : GlobalAggregator` — activeCoordinates=6000
 
-### Why it matters
-This diagram makes the round design concrete and helps translate classes into working system instances.
+**Object links:**
+Coordinator manages Round and distributes GlobalModel. Round includes all three Devices. SecAgg feeds cohort sum to GlobalAgg, which will produce the next global model.
+
+**Relevance:**
+This diagram makes the class design concrete with actual values and shows all three devices at different stages of the same training round.
+
+---
 
 ## 14. Package Diagram
-### Diagram type
-PlantUML package diagram
 
-### Purpose
+**Diagram type:** PlantUML package diagram (UML 2.5.1)
+
+**Purpose:**
 To show the logical organization of the software into modules.
 
-### Packages
-- presentation
-- authentication
-- api
-- federated_learning
-- edge_client
-- local_training
-- privacy
-- secure_aggregation
-- differential_privacy
-- model_compression
-- global_aggregation
-- monitoring
-- database
-- common
+**Server-side packages:**
+- `presentation` — Dashboard
+- `api` — Backend API, Auth Service
+- `federated_learning` — FL Coordinator, Training Round, Device Selector
+- `aggregation` — Global Aggregator, Secure Aggregator
+- `database` — Database Manager
 
-### Dependency direction
-The package structure avoids circular dependencies and reflects a layered design. Presentation depends on API, API depends on authentication and federated learning, and client-side packages depend on local training and privacy modules.
+**Edge-device-side packages:**
+- `edge_client` — FL Client, Local Trainer
+- `privacy` — Differential Privacy, Model Compressor, SecAgg Masking
 
-### Relevance
-This helps in project documentation, team development, and modular implementation.
+**Dependency direction:**
+- `presentation` → `api` → `federated_learning` → `aggregation` → `database`
+- `edge_client` → `privacy`
+- No circular dependencies.
+
+**Relevance:**
+This diagram supports modular development and makes the separation of server-side and device-side responsibilities explicit.
+
+---
 
 ## 15. Communication Diagram
-### Diagram type
-PlantUML communication diagram
 
-### Purpose
-To show object-to-object interactions during a federated learning round.
+**Diagram type:** PlantUML communication diagram (UML 2.5.1)
 
-### Objects involved
-- Dashboard
-- BackendAPI
-- FLCoordinator
-- EdgeDevice1
-- EdgeDevice2
-- LocalTrainer
-- DifferentialPrivacy
-- ModelCompressor
-- SecureAggregator
-- GlobalAggregator
-- Database
+**Purpose:**
+To show object-to-object interactions during one federated learning round with numbered messages.
 
-### Message flow
-The communication diagram follows the same round sequence as the sequence diagram. Authentication is validated, the round is configured, the global model is sent to devices, local updates are processed, and protected updates are aggregated before the global model is updated.
+**Objects:**
+Dashboard, FL Coordinator, Edge Device, Local Trainer, Differential Privacy, Model Compressor, Secure Aggregator, Global Aggregator, Database
 
-### Why it matters
-This diagram highlights the interaction network between the main objects in the architecture.
+**Message sequence (numbered):**
+1. Dashboard → Coordinator: configure and start round
+2. Coordinator → DB: fetch global model → broadcast to Edge Device
+3. Edge Device → LocalTrainer: train locally on D_k (data stays on device)
+4. Edge Device → ModelCompressor: apply sparsification
+5. Edge Device → DifferentialPrivacy: apply clip + noise
+6. Edge Device → ModelCompressor: quantize and apply SecAgg mask
+7. Edge Device → Coordinator: upload masked update y_k
+8. Coordinator → SecureAggregator: unmask cohort sum
+9. Coordinator → GlobalAggregator: aggregate → compute updated model + privacy budget
+10. Coordinator → DB: store model and metrics, mark round complete
+11. Coordinator → Edge Device: distribute updated model
+12. Coordinator → Dashboard: async update (accuracy, epsilon, latency)
+
+**Relevance:**
+This diagram highlights the interaction network between the main objects and is consistent with the Sequence Diagram.
+
+---
 
 ## Summary
-These fifteen diagrams collectively describe the full software design of the federated learning system. Together they cover system context, static structure, data storage, workflows, object behavior, deployment, and communication. They also preserve the essential architectural rule that local datasets remain on edge devices while updates are protected and transmitted securely.
+
+These fifteen diagrams collectively cover the full software design of the federated learning system.
+
+| # | Diagram | Type | Key Purpose |
+|---|---------|------|-------------|
+| 1 | System Architecture | Mermaid graph | Overall system layers |
+| 2 | ER Diagram | Mermaid erDiagram | Database structure |
+| 3 | DFD Level 0 | Mermaid flowchart | System boundary |
+| 4 | DFD Level 1 | Mermaid flowchart | Major processes |
+| 5 | DFD Level 2 | Mermaid flowchart | Detailed FL workflow |
+| 6 | Use Case | PlantUML | User interactions |
+| 7 | Class Diagram | PlantUML | Static software design |
+| 8 | Sequence Diagram | PlantUML | Runtime message flow |
+| 9 | Activity Diagram | PlantUML | Complete workflow |
+| 10 | State Machine | PlantUML | Edge device lifecycle |
+| 11 | Component Diagram | PlantUML | Software components |
+| 12 | Deployment Diagram | PlantUML | Physical infrastructure |
+| 13 | Object Diagram | PlantUML | Runtime snapshot |
+| 14 | Package Diagram | PlantUML | Module organization |
+| 15 | Communication Diagram | PlantUML | Object interactions |
+
+All diagrams preserve the core project principles:
+- **Local training** takes place on physical edge devices.
+- **Raw data never leaves** the edge devices.
+- **Differential Privacy** protects individual updates through adaptive clipping and Gaussian noise.
+- **Secure Aggregation** hides individual contributions from the server.
+- **Model pruning and sparsification** reduce communication overhead.
+- The **FL Coordinator** manages training rounds and device selection.
+- The **Global Aggregator** computes updated global models.
+- The **Dashboard** monitors the complete system.

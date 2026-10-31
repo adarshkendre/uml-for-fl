@@ -3,176 +3,70 @@ graph TB
     %% =====================================================================
     %% SYSTEM ARCHITECTURE DIAGRAM
     %% Privacy-Preserving and Resource-Aware Federated Learning
-    %% for Heterogeneous Edge Devices
     %% Notation: Mermaid graph (top-to-bottom)
     %% =====================================================================
 
-    %% -------------------------
-    %% PRESENTATION LAYER
-    %% -------------------------
-    subgraph PL["🖥️  PRESENTATION LAYER"]
+    subgraph PL["PRESENTATION LAYER"]
         direction LR
-        ADMIN["👤 Admin"]
-        SYSOP["👤 System Operator"]
-        WD["🌐 Web Dashboard\n(Browser UI)"]
+        ADMIN["Admin"]
+        DASH["Web Dashboard"]
     end
 
-    %% -------------------------
-    %% API LAYER
-    %% -------------------------
-    subgraph AL["🔌  API LAYER"]
+    subgraph AL["API LAYER"]
         direction LR
-        API["⚙️ Backend API Server\n(REST / WebSocket)"]
-        AUTH["🔐 Authentication Service\n(JWT / Token-based)"]
+        API["Backend API"]
+        AUTH["Auth Service"]
     end
 
-    %% -------------------------
-    %% FL COORDINATION LAYER
-    %% -------------------------
-    subgraph FCL["📡  FEDERATED LEARNING COORDINATION LAYER  (Central Server)"]
+    subgraph FCL["FL COORDINATION LAYER  (Central Server)"]
         direction LR
-        FLCOORD["🎯 FL Coordinator\n(Round Management\nDevice Selection\nAdmission Scheduler)"]
-        GLOBAGG["📊 Global Aggregation Engine\n(FedAvg / Cohort Sum Decoder)"]
-        SECAGG["🔒 Secure Aggregation Module\n(SecAgg Unmasking\nThreshold Secret Share Recovery)"]
+        FLCOORD["FL Coordinator"]
+        SECAGG["Secure Aggregation"]
+        GLOBAGG["Global Aggregator"]
     end
 
-    %% -------------------------
-    %% EDGE PROCESSING LAYER
-    %% -------------------------
-    subgraph EPL["📱  EDGE PROCESSING LAYER  (Physical Edge Devices)"]
-        direction TB
-        subgraph ED1["Edge Device 1\n(Raspberry Pi / Jetson Nano)"]
-            FLC1["FL Client 1"]
-            LT1["Local Trainer 1\n(SGD + Error Feedback)"]
-            DS1[("🗄️ Local Dataset 1\n(STAYS ON DEVICE)")]
-        end
-        subgraph ED2["Edge Device 2"]
-            FLC2["FL Client 2"]
-            LT2["Local Trainer 2\n(SGD + Error Feedback)"]
-            DS2[("🗄️ Local Dataset 2\n(STAYS ON DEVICE)")]
-        end
-        subgraph ED3["Edge Device N"]
-            FLC3["FL Client N"]
-            LT3["Local Trainer N\n(SGD + Error Feedback)"]
-            DS3[("🗄️ Local Dataset N\n(STAYS ON DEVICE)")]
-        end
-        TEL["📈 Telemetry Probe\n(CPU, RAM, Battery, Network)"]
-    end
-
-    %% -------------------------
-    %% PRIVACY & SECURITY LAYER
-    %% -------------------------
-    subgraph PSL["🛡️  PRIVACY AND SECURITY LAYER  (Per Edge Device)"]
+    subgraph EPL["EDGE DEVICE LAYER  (Physical Devices)"]
         direction LR
-        PP["Privacy Protection Module"]
-        DP["🔏 Differential Privacy Module\n(Adaptive L2 Clipping\nGaussian Noise Injection\nNoise Calibration to M_min)"]
-        MC["📦 Model Compression Module\n(Shared-Mask Sparsification\nError Feedback\nStochastic Quantization)"]
-        SAENC["🔐 SecAgg Masking\n(PRG Self-mask\nPairwise Masks\nModular Ring Z_R)"]
+        FLC["FL Client"]
+        LT["Local Trainer"]
+        DS[("Local Dataset\n(Stays on Device)")]
+        PRIV["Privacy & Compression\n(DP + Sparsification + SecAgg Masking)"]
     end
 
-    %% -------------------------
-    %% DATA STORAGE LAYER
-    %% -------------------------
-    subgraph DSL["💾  DATA STORAGE LAYER"]
-        direction LR
-        DB[("🗃️ Central Database\n(PostgreSQL / SQLite)")]
-        DBU["Users & Auth Sessions"]
-        DBD["Edge Device Registry"]
-        DBR["Training Rounds"]
-        DBM["Global Models"]
-        DBMU["Model Updates (Metadata)"]
-        DBDM["Device Metrics"]
-        DBTM["Training Metrics"]
-        DBAL["Audit Logs"]
+    subgraph DSL["DATA STORAGE LAYER"]
+        DB[("Central Database")]
     end
 
-    %% -------------------------
-    %% MONITORING LAYER
-    %% -------------------------
-    subgraph MON["📊  MONITORING LAYER"]
-        direction LR
-        MONSVC["Monitoring Service\n(Async Non-sensitive Metadata)"]
-        RDPACC["RDP Privacy Accountant\n(Cumulative ε_t tracking)"]
-        PERFMON["Performance Monitor\n(Accuracy, Loss, Round Latency)"]
-        RESMON["Resource Monitor\n(CPU / RAM / Battery / Network)"]
-    end
+    %% Connections
+    ADMIN --> DASH
+    DASH -->|"HTTPS"| API
+    API --> AUTH
+    API -->|"Training Config"| FLCOORD
 
-    %% =====================================================================
-    %% COMMUNICATION PATHS
-    %% =====================================================================
+    FLCOORD -->|"Global Model + Params"| FLC
+    FLC --> LT
+    DS -.->|"Data stays on device"| LT
+    LT -->|"Raw Update"| PRIV
+    PRIV -->|"Masked Update"| FLCOORD
 
-    %% Presentation → API
-    ADMIN -->|"Login / Configure / Monitor"| WD
-    SYSOP -->|"Operate / Monitor"| WD
-    WD -->|"HTTPS REST / WebSocket"| API
+    FLCOORD --> SECAGG
+    SECAGG -->|"Cohort Sum"| GLOBAGG
+    GLOBAGG -->|"Updated Global Model"| FLCOORD
 
-    %% API → Auth
-    API -->|"Validate Credentials"| AUTH
-    AUTH -->|"Token Issued / Rejected"| API
-
-    %% API → FL Coordination
-    API -->|"Training Config\nStart Round Command"| FLCOORD
-
-    %% FL Coordination internals
-    FLCOORD -->|"Select Cohort S_t\nBroadcast (w^t, C^t, I_t)"| EPL
-    FLCOORD -->|"Masked Vectors y_k^t → Unmask"| SECAGG
-    SECAGG -->|"Noisy Cohort Sum S~^t"| GLOBAGG
-    GLOBAGG -->|"Updated Global Model w^(t+1)"| FLCOORD
-
-    %% Edge Device processing (per device, shown for Device 1)
-    FLC1 -->|"Receive w^t, C^t, I_t"| LT1
-    LT1 -->|"Δw_k^t (Raw Update)"| PP
-    DS1 -.->|"Training Data\n(Never Leaves Device)"| LT1
-    PP --> DP
-    PP --> MC
-    DP -->|"Clipped + Noisy Update\nε_t injected"| SAENC
-    MC -->|"Sparsified + Quantized\nK-dim Update"| SAENC
-    SAENC -->|"Masked Upload y_k^t\n(K+1 dimensions)"| FLCOORD
-
-    FLC2 -->|"Receive w^t, C^t, I_t"| LT2
-    LT2 --> PP
-    DS2 -.->|"Training Data\n(Never Leaves Device)"| LT2
-
-    FLC3 -->|"Receive w^t, C^t, I_t"| LT3
-    LT3 --> PP
-    DS3 -.->|"Training Data\n(Never Leaves Device)"| LT3
-
-    %% Telemetry
-    TEL -->|"r_k^t: CPU, RAM\nBattery, Bandwidth"| FLCOORD
-
-    %% DB connections
-    API -->|"CRUD Operations"| DB
-    FLCOORD -->|"Store Round State\nModel Versions"| DB
-    GLOBAGG -->|"Store Global Model\nAggregation Results"| DB
-    DB --- DBU
-    DB --- DBD
-    DB --- DBR
-    DB --- DBM
-    DB --- DBMU
-    DB --- DBDM
-    DB --- DBTM
-    DB --- DBAL
-
-    %% Monitoring
-    FLCOORD -->|"Async Round Metadata\n(Non-sensitive)"| MONSVC
-    MONSVC --- RDPACC
-    MONSVC --- PERFMON
-    MONSVC --- RESMON
-    MONSVC -->|"Dashboard Data"| WD
+    API --> DB
+    FLCOORD --> DB
+    GLOBAGG --> DB
+    DB -->|"Dashboard Data"| DASH
 
     %% Styling
     classDef serverComp fill:#1a237e,stroke:#0d47a1,color:#ffffff
     classDef edgeComp fill:#1b5e20,stroke:#2e7d32,color:#ffffff
-    classDef privacyComp fill:#4a148c,stroke:#6a1b9a,color:#ffffff
-    classDef dataComp fill:#e65100,stroke:#bf360c,color:#ffffff
-    classDef monComp fill:#006064,stroke:#00838f,color:#ffffff
     classDef presComp fill:#37474f,stroke:#546e7a,color:#ffffff
-    classDef datasetNode fill:#b71c1c,stroke:#c62828,color:#ffffff
+    classDef dataComp fill:#e65100,stroke:#bf360c,color:#ffffff
+    classDef privComp fill:#4a148c,stroke:#6a1b9a,color:#ffffff
 
-    class FLCOORD,GLOBAGG,SECAGG serverComp
-    class FLC1,FLC2,FLC3,LT1,LT2,LT3 edgeComp
-    class DP,MC,SAENC,PP privacyComp
-    class DB,DBU,DBD,DBR,DBM,DBMU,DBDM,DBTM,DBAL dataComp
-    class MONSVC,RDPACC,PERFMON,RESMON monComp
-    class ADMIN,SYSOP,WD,API,AUTH presComp
-    class DS1,DS2,DS3 datasetNode
+    class FLCOORD,SECAGG,GLOBAGG,API,AUTH serverComp
+    class FLC,LT edgeComp
+    class ADMIN,DASH presComp
+    class DB,DS dataComp
+    class PRIV privComp
